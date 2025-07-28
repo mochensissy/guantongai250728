@@ -220,11 +220,11 @@ const LearnPage: React.FC = () => {
     const lowerResponse = aiResponse.toLowerCase();
     
     // 1. 首先检查用户是否明确要求跳转到特定小节
-    const lastUserMessage = sessionData.messages.filter(m => m.role === 'user').pop();
-    if (lastUserMessage) {
+    const userMessageForJump = sessionData.messages.filter(m => m.role === 'user').pop();
+    if (userMessageForJump) {
       // 检查用户消息中的小节编号（如"去1.2"、"学习1.3"、"1.2小节"等）
       const userSectionPattern = /(?:去|到|学习|进入|开始)?.*?(\d+\.\d+)(?:小节|节)?/g;
-      const userSectionMatches = [...lastUserMessage.content.matchAll(userSectionPattern)];
+      const userSectionMatches = [...userMessageForJump.content.matchAll(userSectionPattern)];
       
       if (userSectionMatches.length > 0) {
         // 找到最后一个提到的小节编号
@@ -246,18 +246,22 @@ const LearnPage: React.FC = () => {
     }
     
     // 2. 检查AI是否明确提到了具体的小节编号
-    const aiSectionPattern = /(?:现在|开始|进入|学习).*?(\d+\.\d+)(?:小节|节)/g;
+    console.log('AI回复内容:', aiResponse);
+    const aiSectionPattern = /(?:现在|开始|进入|学习|讲解|探讨).*?(\d+\.\d+)(?:小节|节)?/g;
     const aiSectionMatches = [...aiResponse.matchAll(aiSectionPattern)];
+    console.log('AI小节匹配结果:', aiSectionMatches);
     
     if (aiSectionMatches.length > 0) {
       // 找到最后一个提到的小节编号
       const lastMatch = aiSectionMatches[aiSectionMatches.length - 1];
       const sectionNumber = lastMatch[1];
+      console.log('AI提到的小节编号:', sectionNumber);
       
       // 在大纲中查找对应的小节
       const targetSection = sessionData.outline.find(item => 
         item.type === 'section' && item.title.includes(sectionNumber)
       );
+      console.log('找到的目标小节:', targetSection);
       
       if (targetSection && sessionData.currentChapter !== targetSection.id) {
         console.log(`AI明确提到小节 ${sectionNumber}，切换到:`, targetSection.title);
