@@ -238,6 +238,13 @@ const LearnPage: React.FC = () => {
         
         if (targetSection && sessionData.currentChapter !== targetSection.id) {
           console.log(`用户要求跳转到小节 ${sectionNumber}，切换到:`, targetSection.title);
+          
+          // 在跳转到指定小节之前，先标记当前小节为完成
+          if (sessionData.currentChapter) {
+            console.log('用户跳转前标记当前小节为完成:', sessionData.currentChapter);
+            await handleMarkChapterCompleted(sessionData.currentChapter);
+          }
+          
           updateSessionCurrentChapter(sessionData.id, targetSection.id);
           setSession(prev => prev ? { ...prev, currentChapter: targetSection.id } : null);
           return; // 找到明确的小节，直接返回
@@ -265,6 +272,13 @@ const LearnPage: React.FC = () => {
       
       if (targetSection && sessionData.currentChapter !== targetSection.id) {
         console.log(`AI明确提到小节 ${sectionNumber}，切换到:`, targetSection.title);
+        
+        // 在切换到新小节之前，先标记当前小节为完成
+        if (sessionData.currentChapter) {
+          console.log('切换前标记当前小节为完成:', sessionData.currentChapter);
+          await handleMarkChapterCompleted(sessionData.currentChapter);
+        }
+        
         updateSessionCurrentChapter(sessionData.id, targetSection.id);
         setSession(prev => prev ? { ...prev, currentChapter: targetSection.id } : null);
         return; // 找到明确的小节，直接返回
@@ -280,19 +294,30 @@ const LearnPage: React.FC = () => {
       '这个小节的内容就讲完了', '本小节到此结束'
     ];
     
+    console.log('检查AI是否提到完成关键词:', completionKeywords.some(keyword => lowerResponse.includes(keyword)));
+    console.log('AI回复内容(小写):', lowerResponse);
+    
     // 如果AI提到了完成关键词
     if (completionKeywords.some(keyword => lowerResponse.includes(keyword))) {
       let completedSectionId = null;
       
       // 检查是否提到了具体的小节编号（用于标记完成）
-      const completedSectionPattern = /(?:完成了|学完了|结束了).*?(\d+\.\d+)(?:小节|节)/g;
+      // 增强正则表达式，支持更多的表达方式
+      const completedSectionPattern = /(?:完成了|学完了|结束了|已经完成了|我们完成了).*?(\d+\.\d+)(?:小节|节)?.*?(?:的学习|学习|的内容)?/g;
       const completedMatches = [...aiResponse.matchAll(completedSectionPattern)];
+      
+      console.log('完成小节匹配结果:', completedMatches);
       
       if (completedMatches.length > 0) {
         const completedNumber = completedMatches[0][1];
+        console.log('提取到的完成小节编号:', completedNumber);
+        
         const completedSection = sessionData.outline.find(item => 
           item.type === 'section' && item.title.includes(completedNumber)
         );
+        
+        console.log('找到的完成小节:', completedSection);
+        
         if (completedSection) {
           completedSectionId = completedSection.id;
         }
@@ -300,10 +325,12 @@ const LearnPage: React.FC = () => {
       
       // 如果没有明确的编号，尝试通过小节标题匹配
       if (!completedSectionId) {
+        console.log('尝试通过标题匹配完成的小节');
         for (const item of sessionData.outline) {
           if (item.type === 'section') {
             const titleWithoutNumber = item.title.replace(/^\d+\.\d+\s*/, '').trim();
             if (titleWithoutNumber && aiResponse.includes(titleWithoutNumber)) {
+              console.log('通过标题匹配到完成小节:', item.title);
               completedSectionId = item.id;
               break;
             }
@@ -313,6 +340,7 @@ const LearnPage: React.FC = () => {
       
       // 如果还是没找到，使用当前章节
       if (!completedSectionId && sessionData.currentChapter) {
+        console.log('使用当前章节作为完成小节:', sessionData.currentChapter);
         completedSectionId = sessionData.currentChapter;
       }
       
@@ -320,6 +348,8 @@ const LearnPage: React.FC = () => {
       if (completedSectionId) {
         console.log('标记小节为完成:', completedSectionId);
         await handleMarkChapterCompleted(completedSectionId);
+      } else {
+        console.log('未找到要标记为完成的小节');
       }
     }
     
@@ -349,6 +379,11 @@ const LearnPage: React.FC = () => {
             if (sessionData.outline[i].type === 'section') {
               const nextSection = sessionData.outline[i];
               console.log('用户要求推进到下一小节:', nextSection.title);
+              
+              // 在推进到下一节之前，先标记当前小节为完成
+              console.log('用户推进前标记当前小节为完成:', sessionData.currentChapter);
+              await handleMarkChapterCompleted(sessionData.currentChapter);
+              
               updateSessionCurrentChapter(sessionData.id, nextSection.id);
               setSession(prev => prev ? { ...prev, currentChapter: nextSection.id } : null);
               break;
