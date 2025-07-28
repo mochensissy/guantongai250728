@@ -217,16 +217,41 @@ const LearnPage: React.FC = () => {
    * 检查并更新当前章节
    */
   const checkAndUpdateCurrentChapter = async (aiResponse: string, sessionData: LearningSession) => {
-    // 1. 首先检查AI是否明确提到了具体的小节编号
     const lowerResponse = aiResponse.toLowerCase();
     
-    // 检查是否有明确的小节编号提及（如"1.2小节"、"现在学习2.1"等）
-    const sectionNumberPattern = /(?:现在|开始|进入|学习).*?(\d+\.\d+)(?:小节|节)/g;
-    const sectionMatches = [...aiResponse.matchAll(sectionNumberPattern)];
+    // 1. 首先检查用户是否明确要求跳转到特定小节
+    const lastUserMessage = sessionData.messages.filter(m => m.role === 'user').pop();
+    if (lastUserMessage) {
+      // 检查用户消息中的小节编号（如"去1.2"、"学习1.3"、"1.2小节"等）
+      const userSectionPattern = /(?:去|到|学习|进入|开始)?.*?(\d+\.\d+)(?:小节|节)?/g;
+      const userSectionMatches = [...lastUserMessage.content.matchAll(userSectionPattern)];
+      
+      if (userSectionMatches.length > 0) {
+        // 找到最后一个提到的小节编号
+        const lastMatch = userSectionMatches[userSectionMatches.length - 1];
+        const sectionNumber = lastMatch[1];
+        
+        // 在大纲中查找对应的小节
+        const targetSection = sessionData.outline.find(item => 
+          item.type === 'section' && item.title.includes(sectionNumber)
+        );
+        
+        if (targetSection && sessionData.currentChapter !== targetSection.id) {
+          console.log(`用户要求跳转到小节 ${sectionNumber}，切换到:`, targetSection.title);
+          updateSessionCurrentChapter(sessionData.id, targetSection.id);
+          setSession(prev => prev ? { ...prev, currentChapter: targetSection.id } : null);
+          return; // 找到明确的小节，直接返回
+        }
+      }
+    }
     
-    if (sectionMatches.length > 0) {
+    // 2. 检查AI是否明确提到了具体的小节编号
+    const aiSectionPattern = /(?:现在|开始|进入|学习).*?(\d+\.\d+)(?:小节|节)/g;
+    const aiSectionMatches = [...aiResponse.matchAll(aiSectionPattern)];
+    
+    if (aiSectionMatches.length > 0) {
       // 找到最后一个提到的小节编号
-      const lastMatch = sectionMatches[sectionMatches.length - 1];
+      const lastMatch = aiSectionMatches[aiSectionMatches.length - 1];
       const sectionNumber = lastMatch[1];
       
       // 在大纲中查找对应的小节
@@ -305,14 +330,18 @@ const LearnPage: React.FC = () => {
     ];
     
     // 只有当用户的消息中包含这些关键词时才考虑推进
-    const lastUserMessage = sessionData.messages.filter(m => m.role === 'user').pop();
-    if (lastUserMessage && userRequestNextKeywords.some(keyword => lastUserMessage.content.toLowerCase().includes(keyword))) {
+    const userMessageForNext = sessionData.messages.filter(m => m.role === 'user').pop();
+    if (userMessageForNext && userRequestNextKeywords.some(keyword => userMessageForNext.content.toLowerCase().includes(keyword))) {
       // 如果没有明确指定小节编号，自动推进到下一个小节
-      if (!sectionMatches.length && sessionData.currentChapter) {
+      if (!aiSectionMatches.length && sessionData.currentChapter) {
         const currentIndex = sessionData.outline.findIndex(item => item.id === sessionData.currentChapter);
+        console.log('当前章节索引:', currentIndex, '当前章节ID:', sessionData.currentChapter);
+        console.log('大纲结构:', sessionData.outline.map((item, index) => `${index}: ${item.title} (${item.type})`));
+        
         if (currentIndex >= 0) {
           // 查找下一个小节（跳过章节标题）
           for (let i = currentIndex + 1; i < sessionData.outline.length; i++) {
+            console.log(`检查索引 ${i}: ${sessionData.outline[i].title} (${sessionData.outline[i].type})`);
             if (sessionData.outline[i].type === 'section') {
               const nextSection = sessionData.outline[i];
               console.log('用户要求推进到下一小节:', nextSection.title);
