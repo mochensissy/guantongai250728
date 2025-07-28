@@ -232,25 +232,22 @@ ${documentContent}
 要求：
 1. 生成5-8个主要章节（chapter），每个章节只是概括性标题，不包含具体学习内容
 2. 每个章节下必须包含2-3个小节（section），小节才是具体的学习内容
-3. 章节标题格式：第X章 [标题]（X从1开始递增）
-4. 小节标题格式：X.1、X.2、X.3（X对应章节编号，从1开始递增）
+3. 章节标题格式：第X章 [标题]
+4. 小节标题格式：X.1、X.2、X.3（数字编号开头）
 5. 章节和小节标题要简洁明了，能准确概括该部分内容
 6. 应该有逻辑顺序，从基础到高级
 7. 只为小节估算学习时间（章节不需要时间，因为章节只是标题）
-8. 确保每个章节都有对应的小节，不能有空章节
-9. 章节编号必须连续（第1章、第2章、第3章...）
-10. 小节编号必须与章节编号对应（第1章对应1.1、1.2、1.3等）
-11. 只返回JSON格式的大纲列表，不要其他文字
+8. 只返回JSON格式的大纲列表，不要其他文字
 
 返回格式示例（章节不设置时间，只有小节设置时间）：
 [
-  {"title": "第1章 基础概念介绍", "chapterNumber": 1, "type": "chapter", "level": 1},
-  {"title": "1.1 什么是基础概念", "chapterNumber": 1, "sectionNumber": 1, "type": "section", "level": 2, "estimatedMinutes": 8},
-  {"title": "1.2 基础概念的重要性", "chapterNumber": 1, "sectionNumber": 2, "type": "section", "level": 2, "estimatedMinutes": 7},
-  {"title": "1.3 基础概念的应用", "chapterNumber": 1, "sectionNumber": 3, "type": "section", "level": 2, "estimatedMinutes": 10},
-  {"title": "第2章 核心功能详解", "chapterNumber": 2, "type": "chapter", "level": 1},
-  {"title": "2.1 核心功能特点", "chapterNumber": 2, "sectionNumber": 1, "type": "section", "level": 2, "estimatedMinutes": 10},
-  {"title": "2.2 核心功能使用方法", "chapterNumber": 2, "sectionNumber": 2, "type": "section", "level": 2, "estimatedMinutes": 10}
+  {"title": "第1章 基础概念介绍", "order": 1, "type": "chapter", "level": 1},
+  {"title": "1.1 什么是解释", "order": 2, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 8},
+  {"title": "1.2 解释的重要性", "order": 3, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 7},
+  {"title": "1.3 基本原理", "order": 4, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 10},
+  {"title": "第2章 核心功能详解", "order": 5, "type": "chapter", "level": 1},
+  {"title": "2.1 功能特点", "order": 6, "type": "section", "level": 2, "parentChapter": 5, "estimatedMinutes": 10},
+  {"title": "2.2 使用方法", "order": 7, "type": "section", "level": 2, "parentChapter": 5, "estimatedMinutes": 10}
 ]`;
 
     const response = await makeAPIRequest(config, [
@@ -271,12 +268,31 @@ ${documentContent}
       throw new Error('解析的大纲不是数组格式');
     }
 
-    // 验证和修复大纲结构
-    const validatedItems = validateAndFixOutline(outlineItems);
+    // 处理大纲项目，添加必要的字段和时间预估
+    const processedItems = outlineItems.map((item, index) => {
+      const baseItem = {
+        title: item.title || `项目 ${index + 1}`,
+        order: item.order || index + 1,
+        type: item.type || 'chapter',
+        level: item.level || 1,
+        estimatedMinutes: item.estimatedMinutes || (item.type === 'chapter' ? 15 : 8), // 默认时间预估
+      };
 
+      // 如果是小节，需要找到对应的父章节
+      if (baseItem.type === 'section' && item.parentChapter) {
+        const parentChapter = outlineItems.find(parent => 
+          parent.type === 'chapter' && parent.order === item.parentChapter
+        );
+        if (parentChapter) {
+          baseItem.parentId = `chapter-${parentChapter.order}`;
+        }
+      }
+
+      return baseItem;
+    });
     return {
       success: true,
-      outline: validatedItems,
+      outline: processedItems,
     };
   } catch (error) {
     return {
@@ -285,77 +301,6 @@ ${documentContent}
       error: error instanceof Error ? error.message : '生成大纲失败',
     };
   }
-};
-
-/**
- * 验证和修复大纲结构
- * 确保章节编号连续、每个章节都有小节、小节编号正确
- */
-const validateAndFixOutline = (items: any[]): any[] => {
-  const processedItems: any[] = [];
-  let currentChapterNumber = 1;
-  let globalOrder = 1;
-
-  // 按章节分组
-  const chapters = items.filter(item => item.type === 'chapter');
-  const sections = items.filter(item => item.type === 'section');
-
-  for (let i = 0; i < chapters.length; i++) {
-    const chapter = chapters[i];
-    
-    // 处理章节
-    const processedChapter = {
-      title: `第${currentChapterNumber}章 ${chapter.title.replace(/^第\d+章\s*/, '')}`,
-      chapterNumber: currentChapterNumber,
-      type: 'chapter',
-      level: 1,
-      order: globalOrder++,
-    };
-    
-    processedItems.push(processedChapter);
-
-    // 找到该章节对应的小节
-    const chapterSections = sections.filter(section => 
-      section.chapterNumber === chapter.chapterNumber || 
-      section.parentChapter === chapter.order ||
-      section.parentChapter === chapter.chapterNumber
-    );
-
-    // 如果没有找到小节，创建默认小节
-    if (chapterSections.length === 0) {
-      const defaultSection = {
-        title: `${currentChapterNumber}.1 ${chapter.title.replace(/^第\d+章\s*/, '')}的基础内容`,
-        chapterNumber: currentChapterNumber,
-        sectionNumber: 1,
-        type: 'section',
-        level: 2,
-        parentChapter: currentChapterNumber,
-        estimatedMinutes: 15,
-        order: globalOrder++,
-      };
-      processedItems.push(defaultSection);
-    } else {
-      // 处理找到的小节
-      chapterSections.forEach((section, sectionIndex) => {
-        const sectionNumber = sectionIndex + 1;
-        const processedSection = {
-          title: `${currentChapterNumber}.${sectionNumber} ${section.title.replace(/^\d+\.\d+\s*/, '')}`,
-          chapterNumber: currentChapterNumber,
-          sectionNumber,
-          type: 'section',
-          level: 2,
-          parentChapter: currentChapterNumber,
-          estimatedMinutes: section.estimatedMinutes || 8,
-          order: globalOrder++,
-        };
-        processedItems.push(processedSection);
-      });
-    }
-
-    currentChapterNumber++;
-  }
-
-  return processedItems;
 };
 
 /**
