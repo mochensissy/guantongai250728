@@ -24,11 +24,6 @@ self.__BUILD_MANIFEST = {
       "static/chunks/main.js",
       "static/chunks/pages/_error.js"
     ],
-    "/cards": [
-      "static/chunks/webpack.js",
-      "static/chunks/main.js",
-      "static/chunks/pages/cards.js"
-    ],
     "/learn/[sessionId]": [
       "static/chunks/webpack.js",
       "static/chunks/main.js",

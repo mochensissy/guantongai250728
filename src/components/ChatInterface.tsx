@@ -13,7 +13,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2, Lightbulb, Star } from 'lucide-react';
 import { marked } from 'marked';
 import Button from './ui/Button';
-import { ChatMessage } from '@/types';
+import { ChatMessage } from '../types';
 
 interface ChatInterfaceProps {
   /** 对话消息列表 */
@@ -142,7 +142,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
    */
   const renderMarkdown = (content: string): string => {
     try {
-      return marked(content);
+      const result = marked(content);
+      return typeof result === 'string' ? result : content;
     } catch (error) {
       console.error('Markdown渲染失败:', error);
       return content;
@@ -180,12 +181,73 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   /**
+   * 检测AI消息是否需要显示选择按钮
+   */
+  const shouldShowChoiceButtons = (content: string) => {
+    const choicePatterns = [
+      // 开头确认类
+      /准备好了吗[？?]/,
+      /可以开始了吗[？?]/,
+      /准备好开始学习了吗[？?]/,
+      /准备好了解这个内容了吗[？?]/,
+      
+      // 小节结尾确认类
+      /可以开始下一节了吗[？?]/,
+      /可以进入下一节了吗[？?]/,
+      /要继续学习下一节吗[？?]/,
+      /准备好学习下一节了吗[？?]/,
+      /可以开始下一个小节了吗[？?]/,
+      /要开始下一个内容了吗[？?]/,
+      
+      // 通用确认类
+      /您有兴趣吗[？?]/,
+      /您想.*吗[？?]/,
+      /你想.*吗[？?]/,
+      /您准备好.*了吗[？?]/,
+      /你准备好.*了吗[？?]/
+    ];
+
+    return choicePatterns.some(pattern => pattern.test(content));
+  };
+
+  /**
+   * 获取选择按钮的文本
+   */
+  const getChoiceButtonTexts = (content: string) => {
+    // 如果是开头准备确认
+    if (/准备好了吗[？?]/.test(content) || /可以开始了吗[？?]/.test(content)) {
+      return ['准备好了，开始吧！', '等一下'];
+    }
+    
+    // 如果是下一节确认
+    if (/可以开始下一节了吗[？?]/.test(content) || /可以进入下一节了吗[？?]/.test(content)) {
+      return ['开始下一节', '再复习一下'];
+    }
+    
+    // 如果是兴趣确认（反思与探索模块）
+    if (/您有兴趣吗[？?]/.test(content)) {
+      return ['有兴趣，开始吧', '直接进入下一节'];
+    }
+    
+    // 通用确认
+    return ['是的', '不，等一下'];
+  };
+
+  /**
+   * 处理选择按钮点击
+   */
+  const handleChoiceClick = (choice: string) => {
+    onSendMessage(choice);
+  };
+
+  /**
    * 渲染消息内容
    */
   const renderMessage = (message: ChatMessage) => {
     const isUser = message.role === 'user';
     const isSystem = message.role === 'system';
     const isAssistant = message.role === 'assistant';
+    const showChoiceButtons = isAssistant && shouldShowChoiceButtons(message.content);
 
     return (
       <div
@@ -274,6 +336,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
             )}
           </div>
+
+          {/* AI消息的选择按钮 */}
+          {showChoiceButtons && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {getChoiceButtonTexts(message.content).map((choice, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleChoiceClick(choice)}
+                  className={`
+                    px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+                    ${index === 0 
+                      ? 'bg-primary-600 hover:bg-primary-700 text-white' 
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
+                    }
+                  `}
+                >
+                  {choice}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
