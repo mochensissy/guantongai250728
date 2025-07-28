@@ -199,6 +199,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       /可以开始下一个小节了吗[？?]/,
       /要开始下一个内容了吗[？?]/,
       
+      // 内容确认类
+      /你觉得.*如何[？?]/,
+      /您觉得.*如何[？?]/,
+      /有没有.*问题[？?]/,
+      /有什么.*问题[？?]/,
+      /需要.*补充.*吗[？?]/,
+      /有.*需要.*修改.*吗[？?]/,
+      /还有.*疑问吗[？?]/,
+      /明白了吗[？?]/,
+      /清楚了吗[？?]/,
+      /理解了吗[？?]/,
+      
       // 通用确认类
       /您有兴趣吗[？?]/,
       /您想.*吗[？?]/,
@@ -207,6 +219,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       /你准备好.*了吗[？?]/
     ];
 
+    console.log('检测选择按钮:', content, choicePatterns.some(pattern => pattern.test(content)));
     return choicePatterns.some(pattern => pattern.test(content));
   };
 
@@ -227,6 +240,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // 如果是兴趣确认（反思与探索模块）
     if (/您有兴趣吗[？?]/.test(content)) {
       return ['有兴趣，开始吧', '直接进入下一节'];
+    }
+    
+    // 如果是内容理解确认
+    if (/你觉得.*如何[？?]/.test(content) || /您觉得.*如何[？?]/.test(content)) {
+      return ['很好，继续', '有疑问'];
+    }
+    
+    // 如果是问题确认
+    if (/有没有.*问题[？?]/.test(content) || /有什么.*问题[？?]/.test(content)) {
+      return ['没有问题', '有问题'];
+    }
+    
+    // 如果是补充确认
+    if (/需要.*补充.*吗[？?]/.test(content) || /有.*需要.*修改.*吗[？?]/.test(content)) {
+      return ['不需要', '需要补充'];
+    }
+    
+    // 如果是理解确认
+    if (/明白了吗[？?]/.test(content) || /清楚了吗[？?]/.test(content) || /理解了吗[？?]/.test(content)) {
+      return ['明白了', '还有疑问'];
     }
     
     // 通用确认
