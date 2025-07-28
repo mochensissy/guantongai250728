@@ -247,8 +247,8 @@ const LearnPage: React.FC = () => {
       '完成了', '已经完成了', '我们完成了', '刚才完成了',
       '学习完了', '已经学完了', '我们学完了',
       '结束了', '已经结束了', '我们结束了',
-      '下一节', '进入下一节', '开始下一节', '接下来学习',
-      '这一节就到这里', '本节内容结束'
+      '这一节就到这里', '本节内容结束',
+      '这个小节的内容就讲完了', '本小节到此结束'
     ];
     
     // 如果AI提到了完成关键词
@@ -294,13 +294,17 @@ const LearnPage: React.FC = () => {
       }
     }
     
-    // 3. 检查是否需要自动推进到下一节
-    const nextSectionKeywords = [
-      '下一节', '下一小节', '接下来学习', '进入下一节',
-      '继续下一个', '开始下一节', '我们继续'
+    // 3. 检查是否用户明确要求进入下一节
+    // 注意：根据新的"一步一停"教学模式，我们不应该因为AI提到"接下来"就自动推进
+    // 只有当用户明确要求或AI明确说明整个小节已经完成时才推进
+    const userRequestNextKeywords = [
+      '我想学下一节', '进入下一节吧', '开始下一节', 
+      '下一个小节', '继续下一节', '跳到下一节'
     ];
     
-    if (nextSectionKeywords.some(keyword => lowerResponse.includes(keyword))) {
+    // 只有当用户的消息中包含这些关键词时才考虑推进
+    const lastUserMessage = sessionData.messages.filter(m => m.role === 'user').pop();
+    if (lastUserMessage && userRequestNextKeywords.some(keyword => lastUserMessage.content.toLowerCase().includes(keyword))) {
       // 如果没有明确指定小节编号，自动推进到下一个小节
       if (!sectionMatches.length && sessionData.currentChapter) {
         const currentIndex = sessionData.outline.findIndex(item => item.id === sessionData.currentChapter);
@@ -309,7 +313,7 @@ const LearnPage: React.FC = () => {
           for (let i = currentIndex + 1; i < sessionData.outline.length; i++) {
             if (sessionData.outline[i].type === 'section') {
               const nextSection = sessionData.outline[i];
-              console.log('自动推进到下一小节:', nextSection.title);
+              console.log('用户要求推进到下一小节:', nextSection.title);
               updateSessionCurrentChapter(sessionData.id, nextSection.id);
               setSession(prev => prev ? { ...prev, currentChapter: nextSection.id } : null);
               break;
