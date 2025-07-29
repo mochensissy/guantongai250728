@@ -8,7 +8,7 @@
  * - API配置管理
  */
 
-import { APIConfig, APIResponse, GenerateOutlineResponse, ChatMessage } from '@/types';
+import { APIConfig, APIResponse, GenerateOutlineResponse, ChatMessage } from '../types';
 
 /**
  * AI服务提供商配置
@@ -257,13 +257,18 @@ ${documentContent}
 
     // 解析AI返回的JSON
     const content = response.content || '';
+    console.log('AI原始返回内容:', content);
+    
     const jsonMatch = content.match(/\[[\s\S]*\]/);
     
     if (!jsonMatch) {
+      console.error('无法找到JSON格式的大纲');
       throw new Error('AI返回的内容格式不正确');
     }
 
+    console.log('提取的JSON字符串:', jsonMatch[0]);
     const outlineItems = JSON.parse(jsonMatch[0]);
+    console.log('解析后的大纲数组:', outlineItems);
     
     if (!Array.isArray(outlineItems)) {
       throw new Error('解析的大纲不是数组格式');
@@ -271,7 +276,7 @@ ${documentContent}
 
     // 处理大纲项目，添加必要的字段和时间预估
     const processedItems = outlineItems.map((item, index) => {
-      const baseItem = {
+      const baseItem: any = {
         title: item.title || `项目 ${index + 1}`,
         order: item.order || index + 1,
         type: item.type || 'chapter',
