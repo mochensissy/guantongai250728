@@ -2,7 +2,7 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
+  "/learn/[sessionId]": "pages/learn/[sessionId].js",
   "/": "pages/index.js",
-  "/upload": "pages/upload.js",
-  "/learn/[sessionId]": "pages/learn/[sessionId].js"
+  "/upload": "pages/upload.js"
 }
