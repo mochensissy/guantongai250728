@@ -32,7 +32,7 @@ import {
   markChapterCompleted,
   addLearningCard
 } from '../../src/utils/storage';
-import { sendChatMessage, summarizeCardTitle } from '../../src/utils/aiService';
+import { sendChatMessage, summarizeCardTitle, purifyCardContent } from '../../src/utils/aiService';
 
 const LearnPage: React.FC = () => {
   const router = useRouter();
@@ -451,16 +451,24 @@ const LearnPage: React.FC = () => {
     if (!message || message.role !== 'assistant') return;
 
     try {
-      // 使用AI生成简洁的卡片标题
-      const titleResponse = await summarizeCardTitle(apiConfig, message.content);
+      // 并行处理：同时生成标题和提纯内容
+      const [titleResponse, contentResponse] = await Promise.all([
+        summarizeCardTitle(apiConfig, message.content),
+        purifyCardContent(apiConfig, message.content, userNote)
+      ]);
+
       const cardTitle = titleResponse.success ? titleResponse.data : message.content.substring(0, 12);
+      const purifiedContent = contentResponse.success ? contentResponse.data : message.content;
+
+      console.log('原始对话内容:', message.content);
+      console.log('提纯后内容:', purifiedContent);
 
       // 创建卡片
       const card: LearningCard = {
         id: generateCardId(),
         title: cardTitle,
-        content: message.content,
-        userNote,
+        content: purifiedContent, // 使用提纯后的内容
+        userNote, // 用户感受会在purifyCardContent中处理
         type,
         tags: [],
         createdAt: Date.now(),
@@ -491,13 +499,22 @@ const LearnPage: React.FC = () => {
     } catch (error) {
       console.error('创建卡片失败:', error);
       
-      // 如果AI调用失败，使用备用方案
+      // 如果AI调用失败，使用简化处理的备用方案
       const fallbackTitle = message.content.substring(0, 12);
+      
+      // 简单的文本清理作为备用
+      const fallbackContent = message.content
+        .replace(/[😊😄😆🤔💡👍📚✨🎯🚀🔧🎨]/g, '') // 移除表情符号
+        .replace(/你好[！!]*\s*/g, '')
+        .replace(/我们[来去]?[学习讲解分析探讨]*\s*/g, '')
+        .replace(/你觉得.*?[？?]/g, '')
+        .replace(/明白了吗[？?]/g, '')
+        .trim();
       
       const card: LearningCard = {
         id: generateCardId(),
         title: fallbackTitle,
-        content: message.content,
+        content: fallbackContent + (userNote ? `\n\n学习感受：${userNote}` : ''),
         userNote,
         type,
         tags: [],
