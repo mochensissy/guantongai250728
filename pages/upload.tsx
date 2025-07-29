@@ -84,13 +84,34 @@ const UploadPage: React.FC = () => {
       );
 
       if (outlineResponse.success) {
-        const outlineWithIds = outlineResponse.outline.map((item, index) => ({
-          ...item,
-          id: item.type === 'chapter' 
-            ? `chapter-${item.order || index + 1}` 
-            : `section-${item.order || index + 1}`,
-          order: index + 1,
-        }));
+        // 首先为所有章节生成ID映射
+        const chapterIdMap = new Map<number, string>();
+        outlineResponse.outline.forEach((item, index) => {
+          if (item.type === 'chapter') {
+            const chapterNumber = item.chapterNumber || Math.floor(index / 3) + 1; // 估算章节编号
+            chapterIdMap.set(chapterNumber, `chapter-${chapterNumber}`);
+          }
+        });
+
+        const outlineWithIds = outlineResponse.outline.map((item, index) => {
+          const baseItem = {
+            ...item,
+            id: item.type === 'chapter' 
+              ? `chapter-${item.chapterNumber || Math.floor(index / 3) + 1}` 
+              : `section-${item.order || index + 1}`,
+            order: index + 1,
+          };
+
+          // 如果是小节，确保parentId正确设置
+          if (item.type === 'section' && item.parentChapter) {
+            baseItem.parentId = chapterIdMap.get(item.parentChapter) || `chapter-${item.parentChapter}`;
+          }
+
+          return baseItem;
+        });
+        
+        console.log('生成的大纲:', outlineWithIds);
+        console.log('章节映射:', chapterIdMap);
         
         setOutline(outlineWithIds);
         setCurrentStep('outline');
@@ -137,6 +158,7 @@ const UploadPage: React.FC = () => {
         outline,
         messages: [],
         status: 'active',
+        cards: [], // 初始化为空数组
       };
 
       const success = saveSession(session);
