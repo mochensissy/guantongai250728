@@ -84,27 +84,58 @@ const UploadPage: React.FC = () => {
       );
 
       if (outlineResponse.success) {
-        // 首先为所有章节生成ID映射
-        const chapterIdMap = new Map<number, string>();
-        outlineResponse.outline.forEach((item, index) => {
-          if (item.type === 'chapter') {
-            const chapterNumber = item.chapterNumber || Math.floor(index / 3) + 1; // 估算章节编号
-            chapterIdMap.set(chapterNumber, `chapter-${chapterNumber}`);
-          }
+        // 重新排序章节，确保编号连续
+        const chapters = outlineResponse.outline.filter(item => item.type === 'chapter');
+        const sections = outlineResponse.outline.filter(item => item.type === 'section');
+        
+        // 为章节重新分配连续的编号
+        const chapterMapping = new Map<number, number>(); // 原编号 -> 新编号
+        chapters.forEach((chapter: any, index) => {
+          const oldChapterNumber = chapter.chapterNumber || (index + 1);
+          const newChapterNumber = index + 1;
+          chapterMapping.set(oldChapterNumber, newChapterNumber);
         });
 
-        const outlineWithIds = outlineResponse.outline.map((item, index) => {
-          const baseItem = {
+        console.log('章节编号映射:', Array.from(chapterMapping.entries()));
+
+        // 生成章节ID映射
+        const chapterIdMap = new Map<number, string>();
+        chapters.forEach((chapter: any, index) => {
+          const newChapterNumber = index + 1;
+          chapterIdMap.set(chapter.chapterNumber || (index + 1), `chapter-${newChapterNumber}`);
+        });
+
+        console.log('章节ID映射:', Array.from(chapterIdMap.entries()));
+
+        const outlineWithIds = outlineResponse.outline.map((item: any, index) => {
+          const baseItem: any = {
             ...item,
-            id: item.type === 'chapter' 
-              ? `chapter-${item.chapterNumber || Math.floor(index / 3) + 1}` 
-              : `section-${item.order || index + 1}`,
             order: index + 1,
           };
 
-          // 如果是小节，确保parentId正确设置
-          if (item.type === 'section' && item.parentChapter) {
-            baseItem.parentId = chapterIdMap.get(item.parentChapter) || `chapter-${item.parentChapter}`;
+          if (item.type === 'chapter') {
+            // 为章节分配新的连续编号
+            const chapterIndex = chapters.findIndex(c => c === item);
+            const newChapterNumber = chapterIndex + 1;
+            baseItem.id = `chapter-${newChapterNumber}`;
+            baseItem.chapterNumber = newChapterNumber;
+            // 更新标题中的章节编号
+            baseItem.title = item.title.replace(/第\d+章/, `第${newChapterNumber}章`);
+          } else if (item.type === 'section') {
+            // 为小节设置正确的parentId
+            baseItem.id = `section-${item.order || index + 1}`;
+            if (item.parentChapter) {
+              baseItem.parentId = chapterIdMap.get(item.parentChapter);
+              // 更新小节编号以匹配新的章节编号
+              const newChapterNumber = chapterMapping.get(item.parentChapter);
+              if (newChapterNumber) {
+                const sectionMatch = item.title.match(/(\d+)\.(\d+)/);
+                if (sectionMatch) {
+                  const sectionNumber = sectionMatch[2];
+                  baseItem.title = item.title.replace(/\d+\.\d+/, `${newChapterNumber}.${sectionNumber}`);
+                }
+              }
+            }
           }
 
           return baseItem;
