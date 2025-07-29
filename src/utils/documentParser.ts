@@ -10,7 +10,7 @@
  * - 纯文本文档处理
  */
 
-import { DocumentParseResult } from '@/types';
+import { DocumentParseResult } from '../types';
 
 /**
  * 通用文档解析函数
@@ -186,7 +186,13 @@ const parseURL = async (url: string): Promise<DocumentParseResult> => {
     
     // 简单的HTML文本提取（实际项目中可能需要更复杂的解析）
     const textContent = extractTextFromHTML(html);
-    const title = extractTitleFromHTML(html);
+    let title = extractTitleFromHTML(html);
+    
+    // 如果无法从HTML提取标题，尝试从URL生成一个友好的标题
+    if (!title || title.trim() === '') {
+      title = generateTitleFromURL(url);
+      console.log('从URL生成备用标题:', title);
+    }
 
     // 验证提取的内容
     if (!textContent || textContent.trim().length < 50) {
@@ -199,8 +205,6 @@ const parseURL = async (url: string): Promise<DocumentParseResult> => {
       title,
       metadata: {
         wordCount: textContent.split(/\s+/).length,
-        source: 'url',
-        originalUrl: url,
       },
     };
   } catch (error) {
@@ -270,8 +274,88 @@ const extractTextFromHTML = (html: string): string => {
  * 从HTML中提取标题
  */
 const extractTitleFromHTML = (html: string): string => {
-  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-  return titleMatch ? titleMatch[1].trim() : '';
+  // 尝试多种方式提取标题
+  
+  // 方法1: 标准的 <title> 标签
+  let titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/is);
+  if (titleMatch && titleMatch[1].trim()) {
+    const title = titleMatch[1].trim()
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ');
+    console.log('从 <title> 标签提取到标题:', title);
+    return title;
+  }
+
+  // 方法2: Open Graph 标题
+  titleMatch = html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]*)"[^>]*>/i);
+  if (titleMatch && titleMatch[1].trim()) {
+    const title = titleMatch[1].trim();
+    console.log('从 og:title 提取到标题:', title);
+    return title;
+  }
+
+  // 方法3: Twitter Card 标题
+  titleMatch = html.match(/<meta[^>]*name="twitter:title"[^>]*content="([^"]*)"[^>]*>/i);
+  if (titleMatch && titleMatch[1].trim()) {
+    const title = titleMatch[1].trim();
+    console.log('从 twitter:title 提取到标题:', title);
+    return title;
+  }
+
+  // 方法4: 第一个 h1 标签
+  titleMatch = html.match(/<h1[^>]*>(.*?)<\/h1>/is);
+  if (titleMatch && titleMatch[1].trim()) {
+    // 移除HTML标签
+    const title = titleMatch[1].replace(/<[^>]*>/g, '').trim();
+    if (title.length > 0 && title.length < 200) { // 确保标题长度合理
+      console.log('从 h1 标签提取到标题:', title);
+      return title;
+    }
+  }
+
+  // 方法5: 从URL中提取文件名（作为最后的备选方案）
+  console.log('所有标题提取方法都失败了，返回空字符串');
+  return '';
+};
+
+/**
+ * 从URL生成友好的标题
+ */
+const generateTitleFromURL = (url: string): string => {
+  try {
+    const urlObj = new URL(url);
+    
+    // 提取域名
+    const domain = urlObj.hostname.replace(/^www\./, '');
+    
+    // 提取路径的最后一部分
+    const pathParts = urlObj.pathname.split('/').filter(part => part.length > 0);
+    const lastPath = pathParts[pathParts.length - 1];
+    
+    if (lastPath && lastPath !== '') {
+      // 如果路径有内容，格式化它
+      const title = lastPath
+        .replace(/[-_]/g, ' ') // 替换连字符和下划线为空格
+        .replace(/\.(html?|php|jsp|asp)$/i, '') // 移除文件扩展名
+        .replace(/\b\w/g, l => l.toUpperCase()) // 首字母大写
+        .trim();
+      
+      if (title.length > 0) {
+        return `${title} - ${domain}`;
+      }
+    }
+    
+    // 如果没有有用的路径，只返回域名
+    return `${domain}的文章`;
+    
+  } catch (error) {
+    // 如果URL解析失败，返回默认标题
+    return '网页文章';
+  }
 };
 
 /**
