@@ -3,6 +3,6 @@
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
   "/": "pages/index.js",
-  "/learn/[sessionId]": "pages/learn/[sessionId].js",
-  "/cards": "pages/cards.js"
+  "/upload": "pages/upload.js",
+  "/learn/[sessionId]": "pages/learn/[sessionId].js"
 }

@@ -389,6 +389,8 @@ export const summarizeCardTitle = async (
   content: string
 ): Promise<APIResponse<string>> => {
   try {
+    console.log('开始生成卡片标题，内容长度:', content.length);
+    
     // 如果内容本身就很短，直接返回
     if (content.length <= 12) {
       return {
@@ -397,16 +399,27 @@ export const summarizeCardTitle = async (
       };
     }
 
-    // 构建提示词
-    const prompt = `请将以下内容提炼成一个简洁的标题，要求：
-1. 标题长度严格控制在12个汉字以内
-2. 准确概括核心内容
-3. 语言简洁明了
-4. 不要使用引号或其他标点符号
-5. 直接返回标题，不要其他解释
+    // 首先从内容中提取核心主题关键词
+    const coreContent = content
+      .replace(/^(好的|那么|现在|我们|开始学习).*?[。，：]/g, '') // 移除开场白
+      .replace(/[你我们觉得怎么样？！。，；：]/g, '') // 移除对话词汇
+      .replace(/[😊😄😆🤔💡👍📚✨🎯🚀🔧🎨]/g, '') // 移除表情
+      .trim();
+    
+    console.log('提取核心内容用于标题生成:', coreContent.substring(0, 50) + '...');
 
-内容：
-${content}
+    // 构建更精确的提示词
+    const prompt = `请为以下知识内容生成一个精确的标题：
+
+**要求**：
+1. 标题长度严格8-12个汉字
+2. 概括主要知识点或概念
+3. 使用专业术语，避免口语化
+4. 不要包含"学习"、"了解"等动词
+5. 直接返回标题，无需其他文字
+
+**知识内容**：
+${coreContent.substring(0, 200)}
 
 标题：`;
 
@@ -419,15 +432,19 @@ ${content}
     // 清理AI可能添加的引号或其他符号
     title = title.replace(/^["'「『]|["'」』]$/g, '');
     title = title.replace(/^标题[:：]\s*/, '');
+    title = title.replace(/^关于\s*/, '');
+    title = title.replace(/的(介绍|学习|了解)$/, '');
     
     // 确保长度不超过12个字符
     if (title.length > 12) {
       title = title.substring(0, 12);
     }
     
-    // 如果AI生成失败或为空，使用原文前12个字符作为备用
+    console.log('AI生成的标题:', title);
+    
+    // 如果AI生成失败或为空，使用智能提取的备用标题
     if (!title || title.length === 0) {
-      title = content.substring(0, 12);
+      title = generateFallbackTitle(coreContent);
     }
 
     return {
@@ -435,14 +452,80 @@ ${content}
       data: title,
     };
   } catch (error) {
-    // 如果AI调用失败，使用原文前12个字符作为备用方案
-    const fallbackTitle = content.substring(0, 12);
+    console.error('AI标题生成失败:', error);
+    // 如果AI调用失败，使用智能提取的备用方案
+    const fallbackTitle = generateFallbackTitle(content);
     
     return {
       success: true,
       data: fallbackTitle,
     };
   }
+};
+
+/**
+ * 生成备用标题（当AI调用失败时使用）
+ */
+const generateFallbackTitle = (content: string): string => {
+  // 尝试提取关键概念词
+  const keywordPatterns = [
+    /(\w+)(?:是|为|的定义|概念)/,  // 概念定义
+    /(\w+)(?:包括|分为|有)/,     // 分类内容
+    /(\w+)(?:数据|指标|比例)/,   // 数据相关
+    /(\w+)(?:分析|方法|策略)/,   // 方法分析
+  ];
+  
+  for (const pattern of keywordPatterns) {
+    const match = content.match(pattern);
+    if (match && match[1].length >= 2 && match[1].length <= 8) {
+      return match[1];
+    }
+  }
+  
+  // 如果没有匹配到关键词，提取第一个有意义的词汇
+  const meaningfulContent = content
+    .replace(/^(好的|那么|现在|我们|开始学习).*?[。，：]/g, '')
+    .replace(/[你我们觉得怎么样？！]/g, '')
+    .trim();
+    
+  // 提取前8-12个字符作为标题
+  const title = meaningfulContent.substring(0, 10).replace(/[，。；：]/g, '');
+  return title || '知识卡片';
+};
+
+/**
+ * 强化清理对话内容（AI处理失败时的备选方案）
+ */
+const cleanDialogueContent = (content: string): string => {
+  return content
+    // 移除开场白和过渡语
+    .replace(/^(好的|那么|现在|我们现在|接下来|让我们).*?[，。：]/g, '')
+    .replace(/(好的|那么|现在|接下来)[，。]*\s*/g, '')
+    
+    // 移除常见的对话性开头
+    .replace(/^(我们来|我们开始|开始|来|去)[学习讲解分析探讨了解]*\s*/g, '')
+    .replace(/(我们来|我们开始|开始学习|来学习)[学习讲解分析探讨了解]*\s*/g, '')
+    
+    // 移除疑问句和互动语言
+    .replace(/你觉得.*?[？?]/g, '')
+    .replace(/明白了吗[？?]/g, '')
+    .replace(/怎么样[？?]/g, '')
+    .replace(/[对不对是吗对吧][？?]/g, '')
+    
+    // 移除表情符号
+    .replace(/[😊😄😆🤔💡👍📚✨🎯🚀🔧🎨]/g, '')
+    
+    // 移除语气词和填充词
+    .replace(/[哦啊呢吧哈]/g, '')
+    .replace(/这样[，。]*/g, '')
+    
+    // 移除人称代词（在句首）
+    .replace(/^[我你您他她它我们你们他们她们它们][，。]*\s*/g, '')
+    
+    // 清理多余的标点和空格
+    .replace(/[，。]{2,}/g, '。')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 };
 
 /**
@@ -455,23 +538,24 @@ export const purifyCardContent = async (
   userNote?: string
 ): Promise<APIResponse<string>> => {
   try {
-    const prompt = `请将以下AI教学对话内容，提炼成一张纯粹的知识卡片内容。要求：
+    console.log('开始提纯对话内容:', dialogueContent.substring(0, 100) + '...');
+    
+    const prompt = `你是一个专业的知识卡片编辑器。请将以下AI教学对话转换为纯粹的知识卡片内容。
 
-**提炼要求**：
-1. **移除所有对话性语言**：如"你好"、"我们来学习"、"你觉得"、"明白了吗"等
-2. **移除所有感叹词和语气词**：如"😊"、"✨"、"哦"、"呢"、"吧"等  
-3. **保留核心知识内容**：概念、定义、原理、要点、数据等
-4. **使用客观陈述语言**：避免第一人称和第二人称
-5. **保持逻辑结构**：重要的分点、层次关系要保留
-6. **简洁明了**：去掉冗余的解释，保留精华
-7. **如果有用户感受，请单独放在最后一段，前面加上"学习感受："**
+**严格要求**：
+1. **完全删除**：开场白、问候语、过渡语（如"好的"、"那么"、"我们来学习"、"现在开始"等）
+2. **完全删除**：所有疑问句和互动语言（如"你觉得"、"明白了吗"、"怎么样"等）
+3. **完全删除**：表情符号和语气词（😊✨🤔等）
+4. **只保留**：核心知识点、概念定义、数据事实、重要信息
+5. **改写为**：客观的陈述句，避免"我们"、"你"等称呼
+6. **保持**：要点结构和逻辑层次
 
-**原始对话内容**：
+**原始内容**：
 ${dialogueContent}
 
-${userNote ? `**用户添加的感受**：\n${userNote}\n` : ''}
+${userNote ? `\n**用户笔记**：${userNote}` : ''}
 
-请直接返回提炼后的纯知识内容，不要任何其他说明：`;
+**输出要求**：只返回提炼后的知识内容，不要任何解释文字。`;
 
     const response = await makeAPIRequest(config, [
       { role: 'user', content: prompt }
@@ -487,32 +571,25 @@ ${userNote ? `**用户添加的感受**：\n${userNote}\n` : ''}
       }
     }
     
-    // 如果AI处理失败或内容为空，返回原内容的简化版本
-    if (!purifiedContent || purifiedContent.length === 0) {
-      purifiedContent = dialogueContent
-        .replace(/[😊😄😆🤔💡👍📚✨🎯🚀🔧🎨]/g, '') // 移除常见表情符号
-        .replace(/你好[！!]*\s*/g, '')
-        .replace(/我们[来去]?[学习讲解分析探讨]*\s*/g, '')
-        .replace(/你觉得.*?[？?]/g, '')
-        .replace(/明白了吗[？?]/g, '')
-        .replace(/好的[，。]*\s*/g, '')
-        .replace(/那么[，。]*\s*/g, '')
-        .trim();
+    // 如果AI处理失败或内容为空，返回原内容的强化清理版本
+    if (!purifiedContent || purifiedContent.length === 0 || purifiedContent === dialogueContent) {
+      console.log('AI提纯失败，使用规则清理');
+      purifiedContent = cleanDialogueContent(dialogueContent);
     }
+    
+    console.log('最终提纯结果:', purifiedContent.substring(0, 100) + '...');
 
     return {
       success: true,
       data: purifiedContent,
     };
   } catch (error) {
-    // 如果AI调用失败，返回简化处理的原内容
-    const fallbackContent = dialogueContent
-      .replace(/[😊😄😆🤔💡👍📚✨🎯🚀🔧🎨]/g, '') // 移除表情符号
-      .replace(/你好[！!]*\s*/g, '')
-      .replace(/我们[来去]?[学习讲解分析探讨]*\s*/g, '')
-      .replace(/你觉得.*?[？?]/g, '')
-      .replace(/明白了吗[？?]/g, '')
-      .trim();
+    console.error('AI提纯调用失败:', error);
+    // 如果AI调用失败，返回强化清理的内容
+    const fallbackContent = cleanDialogueContent(dialogueContent) + 
+      (userNote ? `\n\n学习感受：${userNote}` : '');
+    
+    console.log('使用备用清理方案:', fallbackContent.substring(0, 100) + '...');
     
     return {
       success: true,

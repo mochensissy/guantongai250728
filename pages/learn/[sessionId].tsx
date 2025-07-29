@@ -451,17 +451,16 @@ const LearnPage: React.FC = () => {
     if (!message || message.role !== 'assistant') return;
 
     try {
-      // 并行处理：同时生成标题和提纯内容
-      const [titleResponse, contentResponse] = await Promise.all([
-        summarizeCardTitle(apiConfig, message.content),
-        purifyCardContent(apiConfig, message.content, userNote)
-      ]);
-
-      const cardTitle = titleResponse.success ? titleResponse.data : message.content.substring(0, 12);
+      // 首先提纯内容，然后基于提纯后的内容生成标题
+      const contentResponse = await purifyCardContent(apiConfig, message.content, userNote);
       const purifiedContent = contentResponse.success ? contentResponse.data : message.content;
 
       console.log('原始对话内容:', message.content);
       console.log('提纯后内容:', purifiedContent);
+
+      // 基于提纯后的内容生成标题（更准确）
+      const titleResponse = await summarizeCardTitle(apiConfig, purifiedContent);
+      const cardTitle = titleResponse.success ? titleResponse.data : purifiedContent.substring(0, 12);
 
       // 创建卡片
       const card: LearningCard = {
