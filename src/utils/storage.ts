@@ -8,8 +8,8 @@
  * - 数据版本控制和迁移
  */
 
-import { LocalStorageData, LearningSession, APIConfig, UserPreferences } from '@/types';
-import { LearningCard, ReviewRecord } from '@/types';
+import { LocalStorageData, LearningSession, APIConfig, UserPreferences, ChatMessage } from '../types';
+import { LearningCard, ReviewRecord } from '../types';
 
 const STORAGE_KEY = 'ai-learning-platform';
 const CURRENT_VERSION = '1.0.0';

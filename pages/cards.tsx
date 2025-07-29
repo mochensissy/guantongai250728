@@ -432,7 +432,7 @@ const CardsPage: React.FC = () => {
   /**
    * 导出卡片数据为CSV格式
    */
-  const handleExportCards = () => {
+  const handleExportCards = async () => {
     try {
       // 获取当前筛选后的卡片数据
       const cardsToExport = filteredCards;
@@ -461,11 +461,16 @@ const CardsPage: React.FC = () => {
      /**
       * 清理HTML实体和格式化内容
       */
-     const cleanHtmlContent = (content: string): string => {
+     const cleanHtmlContent = async (content: string): Promise<string> => {
        if (!content) return '';
        
        // 将Markdown转换为HTML
        let html = marked.parse(content);
+       
+       // 如果是Promise，等待解析
+       if (html instanceof Promise) {
+         html = await html;
+       }
        
        // 清理所有HTML实体，将常见的实体转换回原字符
        html = html
@@ -535,10 +540,10 @@ const CardsPage: React.FC = () => {
        return html.trim();
      };
       // 转换卡片数据为CSV行
-      const csvRows = cardsToExport.map(card => {
+      const csvRows = await Promise.all(cardsToExport.map(async card => {
        // 处理卡片内容和用户笔记
-       const contentHtml = cleanHtmlContent(card.content || '');
-       const noteHtml = cleanHtmlContent(card.userNote || '');
+       const contentHtml = await cleanHtmlContent(card.content || '');
+       const noteHtml = await cleanHtmlContent(card.userNote || '');
         
         // 格式化时间
         const formatDateTime = (timestamp?: number) => {
@@ -573,7 +578,7 @@ const CardsPage: React.FC = () => {
           card.sessionId,
           card.chapterId || ''
         ];
-      });
+      }));
 
       // CSV字段转义函数
       const escapeCSVField = (field: string): string => {

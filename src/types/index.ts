@@ -8,10 +8,13 @@
  * - AI对话相关类型
  */
 
+// 学习水平类型
+export type LearningLevel = 'beginner' | 'expert';
+
 // API配置相关类型
 export interface APIConfig {
   /** API提供商类型 */
-  provider: 'openai' | 'gemini' | 'claude' | 'deepseek' | 'kimi';
+  provider: 'openai' | 'gemini' | 'claude' | 'deepseek' | 'kimi' | 'openrouter';
   /** API密钥 */
   apiKey: string;
   /** API基础URL（可选，用于自定义端点） */

@@ -277,7 +277,7 @@ const extractTitleFromHTML = (html: string): string => {
   // 尝试多种方式提取标题
   
   // 方法1: 标准的 <title> 标签
-  let titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/is);
+  let titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   if (titleMatch && titleMatch[1].trim()) {
     const title = titleMatch[1].trim()
       .replace(/&amp;/g, '&')
@@ -307,7 +307,7 @@ const extractTitleFromHTML = (html: string): string => {
   }
 
   // 方法4: 第一个 h1 标签
-  titleMatch = html.match(/<h1[^>]*>(.*?)<\/h1>/is);
+  titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
   if (titleMatch && titleMatch[1].trim()) {
     // 移除HTML标签
     const title = titleMatch[1].replace(/<[^>]*>/g, '').trim();
