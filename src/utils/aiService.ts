@@ -206,6 +206,64 @@ export const testAPIConnection = async (config: APIConfig): Promise<APIResponse<
 };
 
 /**
+ * 分析文档结构，确定最佳的章节划分策略
+ */
+const analyzeDocumentStructure = (content: string, wordCount: number) => {
+  // 检查文档是否已有明显的章节结构
+  const hasObviousChapters = /第[一二三四五六七八九十\d]+章|Chapter\s*\d+|第[一二三四五六七八九十\d]+部分|[一二三四五六七八九十\d]+\.|Part\s*\d+/gi.test(content);
+  const chapterMatches = content.match(/第[一二三四五六七八九十\d]+章|Chapter\s*\d+/gi) || [];
+  const obviousChapterCount = chapterMatches.length;
+
+  // 根据字数确定章节策略
+  if (wordCount <= 1500) {
+    // 短文档：最多3章，每章3-5节
+    return {
+      recommendedChapters: hasObviousChapters && obviousChapterCount <= 3 ? obviousChapterCount : Math.min(3, Math.max(2, Math.ceil(wordCount / 500))),
+      recommendedSectionsPerChapter: '3-5',
+      instructions: `1. 这是一个短文档（${wordCount}字），生成${hasObviousChapters && obviousChapterCount <= 3 ? obviousChapterCount : Math.min(3, Math.max(2, Math.ceil(wordCount / 500)))}个主要章节
+2. 每个章节下包含3-5个小节，确保内容分布均匀
+3. 重点是增加小节的数量和细分度，而不是章节数量
+4. 小节应该更加细致，每个小节控制在2-4分钟的学习时间`
+    };
+  } else if (wordCount <= 5000) {
+    // 中等文档：3-5章，每章2-4节
+    const recommendedChapters = hasObviousChapters && obviousChapterCount <= 8 ? Math.min(obviousChapterCount, 5) : Math.min(5, Math.max(3, Math.ceil(wordCount / 1000)));
+    return {
+      recommendedChapters,
+      recommendedSectionsPerChapter: '2-4',
+      instructions: `1. 这是一个中等长度文档（${wordCount}字），生成${recommendedChapters}个主要章节
+2. 每个章节下包含2-4个小节
+3. 章节划分应该遵循逻辑结构，从基础到高级
+4. 小节时长建议5-8分钟`
+    };
+  } else {
+    // 长文档：根据内容结构灵活处理
+    if (hasObviousChapters && obviousChapterCount > 8) {
+      // 文档本身就有很多章节，保持原结构
+      return {
+        recommendedChapters: Math.min(obviousChapterCount, 20), // 最多20章，避免过于冗长
+        recommendedSectionsPerChapter: '2-3',
+        instructions: `1. 文档本身包含${obviousChapterCount}个明显的章节结构，保持原有章节划分
+2. 每个章节下包含2-3个小节
+3. 严格按照文档原有的章节标题和结构进行划分
+4. 如果原章节数量超过20个，请合并相似主题的章节`
+      };
+    } else {
+      // 长文档但没有明显章节，限制在8章以内
+      const recommendedChapters = Math.min(8, Math.max(5, Math.ceil(wordCount / 1500)));
+      return {
+        recommendedChapters,
+        recommendedSectionsPerChapter: '3-4',
+        instructions: `1. 这是一个长文档（${wordCount}字），生成${recommendedChapters}个主要章节（最多8章）
+2. 每个章节下包含3-4个小节
+3. 章节划分要有清晰的主题区分，避免内容重叠
+4. 小节时长建议8-12分钟`
+      };
+    }
+  }
+};
+
+/**
  * 生成学习大纲
  * 基于文档内容生成结构化的学习大纲
  */
@@ -220,25 +278,37 @@ export const generateOutline = async (
     const averageReadingSpeed = 300; // 每分钟阅读字数
     const totalEstimatedMinutes = Math.ceil(wordCount / averageReadingSpeed);
 
+    // 智能分析文档结构，确定章节数量
+    const documentStructureAnalysis = analyzeDocumentStructure(documentContent, wordCount);
+    console.log('文档结构分析结果:', {
+      wordCount,
+      recommendedChapters: documentStructureAnalysis.recommendedChapters,
+      recommendedSectionsPerChapter: documentStructureAnalysis.recommendedSectionsPerChapter,
+      instructions: documentStructureAnalysis.instructions
+    });
+
     const prompt = `请基于以下文档内容，生成一个结构化的学习大纲，包含章节和小节的层级结构。
 
 文档标题：${documentTitle || '未知文档'}
 文档字数：${wordCount} 字
 总预估学习时间：${totalEstimatedMinutes} 分钟
+推荐章节数：${documentStructureAnalysis.recommendedChapters}
+推荐每章小节数：${documentStructureAnalysis.recommendedSectionsPerChapter}
 
 文档内容：
 ${documentContent}
 
-要求：
-1. 生成5-8个主要章节（chapter），每个章节只是概括性标题，不包含具体学习内容
-2. 每个章节下必须包含2-3个小节（section），小节才是具体的学习内容
-3. 章节标题格式：第X章 [标题]
-4. 小节标题格式：X.1、X.2、X.3（数字编号开头）
-5. 章节和小节标题要简洁明了，能准确概括该部分内容
-6. 应该有逻辑顺序，从基础到高级
-7. 只为小节估算学习时间（章节不需要时间，因为章节只是标题）
-8. 只返回JSON格式的大纲列表，不要其他文字
-9. **重要：小节编号必须与所属章节保持一致**，例如第1章下的小节必须是1.1、1.2、1.3，第2章下的小节必须是2.1、2.2、2.3
+**智能章节规划要求**：
+${documentStructureAnalysis.instructions}
+
+**通用要求**：
+1. 章节标题格式：第X章 [标题]
+2. 小节标题格式：X.1、X.2、X.3（数字编号开头）
+3. 章节和小节标题要简洁明了，能准确概括该部分内容
+4. 应该有逻辑顺序，从基础到高级
+5. 只为小节估算学习时间（章节不需要时间，因为章节只是标题）
+6. 只返回JSON格式的大纲列表，不要其他文字
+7. **重要：小节编号必须与所属章节保持一致**，例如第1章下的小节必须是1.1、1.2、1.3，第2章下的小节必须是2.1、2.2、2.3
 
 返回格式示例（章节不设置时间，只有小节设置时间）：
 [
