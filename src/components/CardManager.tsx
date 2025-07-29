@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { marked } from 'marked';
 import { 
   BookOpen, 
   Lightbulb, 
@@ -47,6 +48,57 @@ const CardManager: React.FC<CardManagerProps> = ({
   sessionId,
   onCardsUpdate,
 }) => {
+  /**
+   * 渲染Markdown内容并美化显示
+   */
+  const renderContent = (content: string): string => {
+    if (!content) return '';
+    
+    try {
+      // 配置marked选项
+      marked.setOptions({
+        breaks: true,        // 换行转为<br>
+        gfm: true,          // GitHub风格
+      });
+      
+      let html = marked(content);
+      html = typeof html === 'string' ? html : content;
+      
+      // 清理和美化HTML
+      html = html
+        // 移除多余的段落标签
+        .replace(/<p><\/p>/g, '')
+        // 优化列表样式
+        .replace(/<ul>/g, '<ul class="list-disc list-inside mb-2 ml-2">')
+        .replace(/<ol>/g, '<ol class="list-decimal list-inside mb-2 ml-2">')
+        .replace(/<li>/g, '<li class="mb-1">')
+        // 优化标题样式
+        .replace(/<h1>/g, '<h1 class="text-lg font-bold mb-2 text-gray-900">')
+        .replace(/<h2>/g, '<h2 class="text-base font-bold mb-2 text-gray-800">')
+        .replace(/<h3>/g, '<h3 class="text-sm font-bold mb-1 text-gray-800">')
+        // 优化段落样式
+        .replace(/<p>/g, '<p class="mb-2 leading-relaxed">')
+        // 优化强调样式
+        .replace(/<strong>/g, '<strong class="font-semibold text-gray-900">')
+        .replace(/<em>/g, '<em class="italic text-gray-700">')
+        // 优化代码样式
+        .replace(/<code>/g, '<code class="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">')
+        // 优化引用样式
+        .replace(/<blockquote>/g, '<blockquote class="border-l-4 border-blue-200 pl-3 ml-2 italic text-gray-600">');
+      
+      return html;
+    } catch (error) {
+      console.error('Markdown渲染失败:', error);
+      // 如果渲染失败，进行基础文本格式化
+      return content
+        .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
+        .replace(/^##\s+(.*$)/gm, '<h2 class="text-base font-bold mb-2 text-gray-800">$1</h2>')
+        .replace(/^#\s+(.*$)/gm, '<h1 class="text-lg font-bold mb-2 text-gray-900">$1</h1>')
+        .replace(/\n/g, '<br>');
+    }
+  };
+
   // 状态管理
   const [cards, setCards] = useState<LearningCard[]>([]);
   const [reviewCards, setReviewCards] = useState<LearningCard[]>([]);
@@ -372,9 +424,10 @@ const CardManager: React.FC<CardManagerProps> = ({
           <h4 className="font-medium text-gray-900 text-sm mb-2 line-clamp-2">
             {card.title || '无标题'}
           </h4>
-          <p className="text-xs text-gray-600 line-clamp-3 mb-2">
-            {card.content}
-          </p>
+          <div 
+            className="text-xs text-gray-600 line-clamp-3 mb-2"
+            dangerouslySetInnerHTML={{ __html: renderContent(card.content) }}
+          />
           {card.userNote && (
             <div className="bg-yellow-50 border-l-4 border-yellow-400 p-2 mt-2">
               <p className="text-xs text-yellow-800">
@@ -726,9 +779,10 @@ const CardManager: React.FC<CardManagerProps> = ({
                 <h4 className="font-medium text-gray-900 mb-2">
                   {currentReviewCard.title || '无标题'}
                 </h4>
-                <p className="text-sm text-gray-600 mb-3">
-                  {currentReviewCard.content}
-                </p>
+                <div 
+                  className="text-sm text-gray-600 mb-3 prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: renderContent(currentReviewCard.content) }}
+                />
                 {currentReviewCard.userNote && (
                   <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3">
                     <p className="text-sm text-yellow-800">
