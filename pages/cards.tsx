@@ -271,6 +271,7 @@ const CardsPage: React.FC = () => {
 
     const success = updateLearningCard(editingCard.sessionId, editingCard.id, {
       title: editingCard.title,
+      content: editingCard.content,
       userNote: editingCard.userNote,
       tags: editingCard.tags || [],
     });
@@ -1030,13 +1031,26 @@ const CardsPage: React.FC = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  卡片内容
+                </label>
+                <textarea
+                  value={editingCard.content || ''}
+                  onChange={(e) => setEditingCard({ ...editingCard, content: e.target.value })}
+                  placeholder="编辑卡片的核心知识内容..."
+                  rows={6}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   您的笔记
                 </label>
                 <textarea
                   value={editingCard.userNote || ''}
                   onChange={(e) => setEditingCard({ ...editingCard, userNote: e.target.value })}
                   placeholder="添加您的想法、感受或笔记..."
-                  rows={4}
+                  rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
                 />
               </div>
