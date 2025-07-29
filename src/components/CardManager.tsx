@@ -796,42 +796,61 @@ const CardManager: React.FC<CardManagerProps> = ({
                 请根据您对这张卡片内容的掌握程度选择：
               </p>
               
-              <div className="grid grid-cols-1 gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => handleCompleteReview(5)}
-                  className="text-green-600 border-green-300 hover:bg-green-50"
-                >
-                  😊 很容易 - 完全掌握
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleCompleteReview(4)}
-                  className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                >
-                  🙂 容易 - 基本掌握
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleCompleteReview(3)}
-                  className="text-yellow-600 border-yellow-300 hover:bg-yellow-50"
-                >
-                  😐 一般 - 有些印象
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleCompleteReview(2)}
-                  className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                >
-                  😕 困难 - 不太记得
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleCompleteReview(1)}
-                  className="text-red-600 border-red-300 hover:bg-red-50"
-                >
-                  😰 很困难 - 完全忘记
-                </Button>
+              {/* 五点量表横向布局 */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-xs text-gray-500">
+                  <span>很困难</span>
+                  <span>困难</span>
+                  <span>一般</span>
+                  <span>容易</span>
+                  <span>很容易</span>
+                </div>
+                
+                <div className="flex justify-between gap-2">
+                  <button
+                    onClick={() => handleCompleteReview(1)}
+                    className="flex flex-col items-center justify-center w-16 h-16 rounded-lg border-2 border-red-300 hover:bg-red-50 transition-colors group"
+                  >
+                    <span className="text-xl mb-1">😰</span>
+                    <span className="text-xs text-red-600 font-medium">1</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => handleCompleteReview(2)}
+                    className="flex flex-col items-center justify-center w-16 h-16 rounded-lg border-2 border-orange-300 hover:bg-orange-50 transition-colors group"
+                  >
+                    <span className="text-xl mb-1">😕</span>
+                    <span className="text-xs text-orange-600 font-medium">2</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => handleCompleteReview(3)}
+                    className="flex flex-col items-center justify-center w-16 h-16 rounded-lg border-2 border-yellow-300 hover:bg-yellow-50 transition-colors group"
+                  >
+                    <span className="text-xl mb-1">😐</span>
+                    <span className="text-xs text-yellow-600 font-medium">3</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => handleCompleteReview(4)}
+                    className="flex flex-col items-center justify-center w-16 h-16 rounded-lg border-2 border-blue-300 hover:bg-blue-50 transition-colors group"
+                  >
+                    <span className="text-xl mb-1">🙂</span>
+                    <span className="text-xs text-blue-600 font-medium">4</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => handleCompleteReview(5)}
+                    className="flex flex-col items-center justify-center w-16 h-16 rounded-lg border-2 border-green-300 hover:bg-green-50 transition-colors group"
+                  >
+                    <span className="text-xl mb-1">😊</span>
+                    <span className="text-xs text-green-600 font-medium">5</span>
+                  </button>
+                </div>
+                
+                <div className="text-center text-xs text-gray-400 mt-2">
+                  点击选择您的掌握程度（1=完全忘记，5=完全掌握）
+                </div>
               </div>
             </div>
 

@@ -337,7 +337,9 @@ export const deleteLearningCard = (sessionId: string, cardId: string): boolean =
  */
 export const getSessionCards = (sessionId: string): LearningCard[] => {
   const session = getSessionById(sessionId);
-  return session?.cards || [];
+  const cards = session?.cards || [];
+  // 按创建时间倒序排列，最新的卡片在前面
+  return cards.sort((a, b) => b.createdAt - a.createdAt);
 };
 
 /**
