@@ -238,16 +238,17 @@ ${documentContent}
 6. 应该有逻辑顺序，从基础到高级
 7. 只为小节估算学习时间（章节不需要时间，因为章节只是标题）
 8. 只返回JSON格式的大纲列表，不要其他文字
+9. **重要：小节编号必须与所属章节保持一致**，例如第1章下的小节必须是1.1、1.2、1.3，第2章下的小节必须是2.1、2.2、2.3
 
 返回格式示例（章节不设置时间，只有小节设置时间）：
 [
-  {"title": "第1章 基础概念介绍", "order": 1, "type": "chapter", "level": 1},
+  {"title": "第1章 基础概念介绍", "order": 1, "type": "chapter", "level": 1, "chapterNumber": 1},
   {"title": "1.1 什么是解释", "order": 2, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 8},
   {"title": "1.2 解释的重要性", "order": 3, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 7},
   {"title": "1.3 基本原理", "order": 4, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 10},
-  {"title": "第2章 核心功能详解", "order": 5, "type": "chapter", "level": 1},
-  {"title": "2.1 功能特点", "order": 6, "type": "section", "level": 2, "parentChapter": 5, "estimatedMinutes": 10},
-  {"title": "2.2 使用方法", "order": 7, "type": "section", "level": 2, "parentChapter": 5, "estimatedMinutes": 10}
+  {"title": "第2章 核心功能详解", "order": 5, "type": "chapter", "level": 1, "chapterNumber": 2},
+  {"title": "2.1 功能特点", "order": 6, "type": "section", "level": 2, "parentChapter": 2, "estimatedMinutes": 10},
+  {"title": "2.2 使用方法", "order": 7, "type": "section", "level": 2, "parentChapter": 2, "estimatedMinutes": 10}
 ]`;
 
     const response = await makeAPIRequest(config, [
@@ -280,11 +281,12 @@ ${documentContent}
 
       // 如果是小节，需要找到对应的父章节
       if (baseItem.type === 'section' && item.parentChapter) {
+        // 按章节编号匹配，而不是order
         const parentChapter = outlineItems.find(parent => 
-          parent.type === 'chapter' && parent.order === item.parentChapter
+          parent.type === 'chapter' && (parent.chapterNumber === item.parentChapter || parent.order === item.parentChapter)
         );
         if (parentChapter) {
-          baseItem.parentId = `chapter-${parentChapter.order}`;
+          baseItem.parentId = `chapter-${parentChapter.chapterNumber || parentChapter.order}`;
         }
       }
 
