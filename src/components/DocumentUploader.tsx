@@ -13,8 +13,8 @@ import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
 import { Upload, Link, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import Button from './ui/Button';
 import Input from './ui/Input';
-import { parseDocument, validateParseResult } from '@/utils/documentParser';
-import { DocumentParseResult } from '@/types';
+import { parseDocument, validateParseResult } from '../utils/documentParser';
+import { DocumentParseResult } from '../types';
 
 interface DocumentUploaderProps {
   /** 文档上传完成回调 */

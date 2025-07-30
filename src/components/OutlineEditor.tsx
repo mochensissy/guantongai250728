@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import Button from './ui/Button';
 import Input from './ui/Input';
-import { OutlineItem } from '@/types';
+import { OutlineItem } from '../types';
 
 interface OutlineEditorProps {
   /** 大纲项目列表 */

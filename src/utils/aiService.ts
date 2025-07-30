@@ -192,8 +192,9 @@ ${documentStructureAnalysis.instructions}
 3. 章节和小节标题要简洁明了，能准确概括该部分内容
 4. 应该有逻辑顺序，从基础到高级
 5. 只为小节估算学习时间（章节不需要时间，因为章节只是标题）
-6. 只返回JSON格式的大纲列表，不要其他文字
+6. **重要：只返回纯JSON格式的数组，不要任何其他文字、解释或代码块标记**
 7. **重要：小节编号必须与所属章节保持一致**，例如第1章下的小节必须是1.1、1.2、1.3，第2章下的小节必须是2.1、2.2、2.3
+8. **严格要求：回复必须以'['开头，以']'结尾，中间只能是JSON数组内容**
 
 返回格式示例（章节不设置时间，只有小节设置时间）：
 [
@@ -214,16 +215,41 @@ ${documentStructureAnalysis.instructions}
     const content = response.content || '';
     console.log('AI原始返回内容:', content);
     
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    let outlineItems: any[] = [];
     
-    if (!jsonMatch) {
-      console.error('无法找到JSON格式的大纲');
-      throw new Error('AI返回的内容格式不正确');
+    try {
+      // 方法1: 直接查找JSON数组
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      
+      if (jsonMatch) {
+        console.log('方法1: 提取的JSON字符串:', jsonMatch[0]);
+        outlineItems = JSON.parse(jsonMatch[0]);
+        console.log('方法1: 解析后的大纲数组:', outlineItems);
+      } else {
+        // 方法2: 查找代码块中的JSON
+        const codeBlockMatch = content.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+        if (codeBlockMatch) {
+          console.log('方法2: 从代码块提取JSON:', codeBlockMatch[1]);
+          outlineItems = JSON.parse(codeBlockMatch[1]);
+          console.log('方法2: 解析后的大纲数组:', outlineItems);
+        } else {
+          // 方法3: 尝试直接解析整个内容
+          try {
+            console.log('方法3: 尝试直接解析整个内容');
+            outlineItems = JSON.parse(content.trim());
+            console.log('方法3: 解析成功:', outlineItems);
+          } catch (e) {
+            console.error('方法3失败:', e);
+            console.error('无法找到有效的JSON格式大纲');
+            throw new Error('AI返回的内容格式不正确，无法解析JSON数组');
+          }
+        }
+      }
+    } catch (parseError) {
+      console.error('JSON解析失败:', parseError);
+      console.error('原始内容:', content);
+      throw new Error('AI返回的JSON格式有误，无法解析');
     }
-
-    console.log('提取的JSON字符串:', jsonMatch[0]);
-    const outlineItems = JSON.parse(jsonMatch[0]);
-    console.log('解析后的大纲数组:', outlineItems);
     
     if (!Array.isArray(outlineItems)) {
       throw new Error('解析的大纲不是数组格式');

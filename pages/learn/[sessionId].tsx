@@ -53,16 +53,28 @@ const LearnPage: React.FC = () => {
 
     const loadSession = () => {
       try {
+        console.log('🔍 开始加载会话，sessionId:', sessionId);
+        
+        // 检查localStorage中的所有会话
+        const allSessions = JSON.parse(localStorage.getItem('ai-learning-platform') || '{"sessions":[]}');
+        console.log('📦 localStorage中的所有会话:', allSessions.sessions?.map(s => ({id: s.id, title: s.title})));
+        
         const loadedSession = getSessionById(sessionId);
         const loadedConfig = getAPIConfig();
+        
+        console.log('🎯 查找的会话ID:', sessionId);
+        console.log('📋 找到的会话:', loadedSession ? `${loadedSession.title} (${loadedSession.id})` : 'null');
+        console.log('⚙️ API配置:', loadedConfig ? 'ok' : 'null');
 
         if (!loadedSession) {
+          console.error('❌ 学习会话不存在，sessionId:', sessionId);
           alert('学习会话不存在');
           router.push('/');
           return;
         }
 
         if (!loadedConfig) {
+          console.error('❌ API配置丢失');
           alert('API配置丢失，请重新配置');
           router.push('/');
           return;

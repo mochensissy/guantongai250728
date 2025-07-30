@@ -22,7 +22,7 @@ import {
 import Button from './ui/Button';
 import Input from './ui/Input';
 import Card from './ui/Card';
-import { LearningSession } from '@/types';
+import { LearningSession } from '../types';
 
 interface SessionHistoryListProps {
   /** 会话列表 */

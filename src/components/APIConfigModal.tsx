@@ -14,8 +14,8 @@ import Modal from './ui/Modal';
 import Button from './ui/Button';
 import Input from './ui/Input';
 import Select from './ui/Select';
-import { APIConfig } from '@/types';
-import { getSupportedProviders, testAPIConnection } from '@/utils/aiService';
+import { APIConfig } from '../types';
+import { getSupportedProviders, testAPIConnection } from '../utils/aiService';
 
 interface APIConfigModalProps {
   /** 是否显示模态框 */
