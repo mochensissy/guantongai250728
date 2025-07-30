@@ -227,8 +227,12 @@ export const generateOutline = async (
 
     const prompt = `请基于以下文档内容，生成一个结构化的学习大纲，包含章节和小节的层级结构。
 
-文档标题：${documentTitle || '未知文档'}
-文档字数：${wordCount} 字
+${!documentTitle || documentTitle === '未知文档' || documentTitle === '文本内容' ? `
+**首先**，请为这份文档生成一个8-20字的精确标题：
+要求：概括主要知识点或概念，使用专业术语，避免口语化，不要包含"学习"、"了解"等动词。
+
+然后，` : `文档标题：${documentTitle}
+`}文档字数：${wordCount} 字
 总预估学习时间：${totalEstimatedMinutes} 分钟
 推荐章节数：${documentStructureAnalysis.recommendedChapters}
 推荐每章小节数：${documentStructureAnalysis.recommendedSectionsPerChapter}
@@ -245,20 +249,27 @@ ${documentStructureAnalysis.instructions}
 3. 章节和小节标题要简洁明了，能准确概括该部分内容
 4. 应该有逻辑顺序，从基础到高级
 5. 只为小节估算学习时间（章节不需要时间，因为章节只是标题）
-6. **重要：只返回纯JSON格式的数组，不要任何其他文字、解释或代码块标记**
+6. **重要：返回格式必须是JSON对象，包含documentTitle（如果需要生成标题）和outline数组**
 7. **重要：小节编号必须与所属章节保持一致**，例如第1章下的小节必须是1.1、1.2、1.3，第2章下的小节必须是2.1、2.2、2.3
-8. **严格要求：回复必须以'['开头，以']'结尾，中间只能是JSON数组内容**
 
-返回格式示例（章节不设置时间，只有小节设置时间）：
-[
-  {"title": "第1章 基础概念介绍", "order": 1, "type": "chapter", "level": 1, "chapterNumber": 1},
-  {"title": "1.1 什么是解释", "order": 2, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 8},
-  {"title": "1.2 解释的重要性", "order": 3, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 7},
-  {"title": "1.3 基本原理", "order": 4, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 10},
-  {"title": "第2章 核心功能详解", "order": 5, "type": "chapter", "level": 1, "chapterNumber": 2},
-  {"title": "2.1 功能特点", "order": 6, "type": "section", "level": 2, "parentChapter": 2, "estimatedMinutes": 10},
-  {"title": "2.2 使用方法", "order": 7, "type": "section", "level": 2, "parentChapter": 2, "estimatedMinutes": 10}
-]`;
+${!documentTitle || documentTitle === '未知文档' || documentTitle === '文本内容' ? `
+返回格式（需要生成标题）：
+{
+  "documentTitle": "生成的精确标题",
+  "outline": [
+    {"title": "第1章 基础概念介绍", "order": 1, "type": "chapter", "level": 1, "chapterNumber": 1},
+    {"title": "1.1 什么是解释", "order": 2, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 8},
+    {"title": "1.2 解释的重要性", "order": 3, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 7}
+  ]
+}` : `
+返回格式（已有标题）：
+{
+  "outline": [
+    {"title": "第1章 基础概念介绍", "order": 1, "type": "chapter", "level": 1, "chapterNumber": 1},
+    {"title": "1.1 什么是解释", "order": 2, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 8},
+    {"title": "1.2 解释的重要性", "order": 3, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 7}
+  ]
+}`}`;
 
     const response = await makeAPIRequest(config, [
       { role: 'user', content: prompt }
@@ -268,36 +279,61 @@ ${documentStructureAnalysis.instructions}
     const content = response.content || '';
     console.log('AI原始返回内容:', content);
     
+    let parsedResponse: any = {};
     let outlineItems: any[] = [];
+    let generatedTitle: string | undefined;
     
     try {
-      // 方法1: 直接查找JSON数组
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      // 方法1: 查找完整的JSON对象
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
       
       if (jsonMatch) {
         console.log('方法1: 提取的JSON字符串:', jsonMatch[0]);
-        outlineItems = JSON.parse(jsonMatch[0]);
-        console.log('方法1: 解析后的大纲数组:', outlineItems);
+        parsedResponse = JSON.parse(jsonMatch[0]);
+        console.log('方法1: 解析后的响应对象:', parsedResponse);
       } else {
         // 方法2: 查找代码块中的JSON
-        const codeBlockMatch = content.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+        const codeBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
         if (codeBlockMatch) {
           console.log('方法2: 从代码块提取JSON:', codeBlockMatch[1]);
-          outlineItems = JSON.parse(codeBlockMatch[1]);
-          console.log('方法2: 解析后的大纲数组:', outlineItems);
+          parsedResponse = JSON.parse(codeBlockMatch[1]);
+          console.log('方法2: 解析后的响应对象:', parsedResponse);
         } else {
           // 方法3: 尝试直接解析整个内容
           try {
             console.log('方法3: 尝试直接解析整个内容');
-            outlineItems = JSON.parse(content.trim());
-            console.log('方法3: 解析成功:', outlineItems);
+            parsedResponse = JSON.parse(content.trim());
+            console.log('方法3: 解析成功:', parsedResponse);
           } catch (e) {
-            console.error('方法3失败:', e);
-            console.error('无法找到有效的JSON格式大纲');
-            throw new Error('AI返回的内容格式不正确，无法解析JSON数组');
+            // 方法4: 尝试解析旧格式（数组）
+            const arrayMatch = content.match(/\[[\s\S]*\]/);
+            if (arrayMatch) {
+              console.log('方法4: 兼容旧格式，提取数组:', arrayMatch[0]);
+              outlineItems = JSON.parse(arrayMatch[0]);
+              console.log('方法4: 解析后的大纲数组:', outlineItems);
+            } else {
+              console.error('方法4失败:', e);
+              console.error('无法找到有效的JSON格式大纲');
+              throw new Error('AI返回的内容格式不正确，无法解析JSON');
+            }
           }
         }
       }
+      
+      // 处理新格式的响应
+      if (parsedResponse.outline) {
+        outlineItems = parsedResponse.outline;
+        generatedTitle = parsedResponse.documentTitle;
+        console.log('提取到大纲项目:', outlineItems.length, '个');
+        if (generatedTitle) {
+          console.log('AI生成的文档标题:', generatedTitle);
+        }
+      } else if (Array.isArray(parsedResponse)) {
+        // 兼容旧格式
+        outlineItems = parsedResponse;
+        console.log('使用旧格式，大纲项目:', outlineItems.length, '个');
+      }
+      
     } catch (parseError) {
       console.error('JSON解析失败:', parseError);
       console.error('原始内容:', content);
@@ -334,6 +370,7 @@ ${documentStructureAnalysis.instructions}
     return {
       success: true,
       outline: processedItems,
+      generatedTitle, // 如果AI生成了标题，一并返回
     };
   } catch (error) {
     return {
@@ -376,11 +413,12 @@ export const summarizeCardTitle = async (
     const prompt = `请为以下知识内容生成一个精确的标题：
 
 **要求**：
-1. 标题长度8-12个汉字
+1. 标题长度8-20个汉字，优先选择12-16字的完整表达
 2. 概括主要知识点或概念
 3. 使用专业术语，避免口语化
 4. 不要包含"学习"、"了解"等动词
-5. 只返回标题文字，不要其他内容
+5. 确保标题语义完整，不要在词汇中间截断
+6. 只返回标题文字，不要其他内容
 
 **知识内容**：
 ${coreContent.substring(0, 300)}
@@ -399,9 +437,29 @@ ${coreContent.substring(0, 300)}
     title = title.replace(/^关于\s*/, '');
     title = title.replace(/的(介绍|学习|了解)$/, '');
     
-    // 确保长度不超过12个字符
-    if (title.length > 12) {
-      title = title.substring(0, 12);
+    // 智能截断标题，确保语义完整性
+    if (title.length > 20) {
+      // 尝试在合适的断点截断（标点符号、连词等）
+      const breakPoints = [
+        /^(.{12,18})[：:、，。；！？]/,  // 在标点符号处断开
+        /^(.{12,18})(?:的|与|和|及|或|等)/,  // 在连词处断开
+        /^(.{12,18})(?=\s)/,  // 在空格处断开
+      ];
+      
+      let truncated = false;
+      for (const pattern of breakPoints) {
+        const match = title.match(pattern);
+        if (match && match[1]) {
+          title = match[1];
+          truncated = true;
+          break;
+        }
+      }
+      
+      // 如果没有合适的断点，保留前18个字符并添加省略号
+      if (!truncated) {
+        title = title.substring(0, 18) + '...';
+      }
     }
     
     console.log('AI生成的标题:', title);
@@ -429,31 +487,69 @@ ${coreContent.substring(0, 300)}
 
 /**
  * 生成备用标题（当AI调用失败时使用）
+ * 智能提取关键概念，生成语义完整的标题
  */
 const generateFallbackTitle = (content: string): string => {
-  // 尝试提取关键概念词
+  // 扩展的关键概念提取模式
   const keywordPatterns = [
-    /(\w+)(?:是|为|的定义|概念)/,  // 概念定义
-    /(\w+)(?:包括|分为|有)/,     // 分类内容
-    /(\w+)(?:数据|指标|比例)/,   // 数据相关
-    /(\w+)(?:分析|方法|策略)/,   // 方法分析
+    /([^。，！？]{4,16})(?:是|为|的定义|概念|含义)/,  // 概念定义
+    /([^。，！？]{4,16})(?:包括|分为|有|具有)/,     // 分类内容
+    /([^。，！？]{4,16})(?:数据|指标|比例|统计)/,   // 数据相关
+    /([^。，！？]{4,16})(?:分析|方法|策略|技术)/,   // 方法分析
+    /([^。，！？]{4,16})(?:原理|机制|过程|流程)/,   // 原理机制
+    /关于([^。，！？]{4,16})/,                    // 关于某话题
+    /([^。，！？]{4,16})的(?:特点|特征|优势|问题)/, // 特征描述
   ];
   
+  // 优先尝试提取完整的概念短语
   for (const pattern of keywordPatterns) {
     const match = content.match(pattern);
-    if (match && match[1].length >= 2 && match[1].length <= 8) {
-      return match[1];
+    if (match && match[1]) {
+      let title = match[1].trim();
+      // 清理标题中的干扰词汇
+      title = title.replace(/^(那么|现在|我们|开始|首先)/, '');
+      title = title.replace(/[你我们]的?/, '');
+      
+      if (title.length >= 4 && title.length <= 16) {
+        return title;
+      }
     }
   }
   
-  // 如果没有匹配到关键词，提取第一个有意义的词汇
+  // 如果没有匹配到关键词模式，尝试提取句首的主要概念
   const meaningfulContent = content
-    .replace(/^(好的|那么|现在|我们|开始学习).*?[。，：]/g, '')
-    .replace(/[你我们觉得怎么样？！]/g, '')
+    .replace(/^(好的|那么|现在|我们|开始学习).*?[。，：]/g, '') // 移除开场白
+    .replace(/[你我们觉得怎么样？！]/g, '') // 移除对话词汇
+    .replace(/^\s*[\d]+\.?\s*/, '') // 移除序号
     .trim();
-    
-  // 提取前8-12个字符作为标题
-  const title = meaningfulContent.substring(0, 10).replace(/[，。；：]/g, '');
+  
+  // 尝试提取第一个完整的概念短语（以标点分隔）
+  const firstPhrase = meaningfulContent.split(/[。，；：！？]/)[0];
+  if (firstPhrase && firstPhrase.length >= 4 && firstPhrase.length <= 16) {
+    return firstPhrase.trim();
+  }
+  
+  // 最后的备用方案：智能截取前面的内容
+  let title = meaningfulContent.substring(0, 15);
+  
+  // 尝试在合适的地方截断，避免切断词汇
+  const cutPoints = [
+    /^(.{6,12})(?=[的地得])/,    // 在助词前截断
+    /^(.{6,12})(?=[，。；：])/,   // 在标点前截断
+    /^(.{6,12})(?=\s)/,          // 在空格前截断
+  ];
+  
+  for (const pattern of cutPoints) {
+    const match = title.match(pattern);
+    if (match && match[1]) {
+      title = match[1];
+      break;
+    }
+  }
+  
+  // 清理末尾可能的不完整字符
+  title = title.replace(/[，。；：！？]*$/, '');
+  
   return title || '知识卡片';
 };
 

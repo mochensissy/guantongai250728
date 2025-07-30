@@ -164,6 +164,8 @@ export interface GenerateOutlineResponse {
   success: boolean;
   /** 生成的大纲项目列表 */
   outline: Omit<OutlineItem, 'id'>[];
+  /** AI生成的文档标题（如果有） */
+  generatedTitle?: string;
   /** 错误信息（如果生成失败） */
   error?: string;
 }

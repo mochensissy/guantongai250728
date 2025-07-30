@@ -14,18 +14,21 @@ import { Upload, Link, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import Button from './ui/Button';
 import Input from './ui/Input';
 import { parseDocument, validateParseResult } from '../utils/documentParser';
-import { DocumentParseResult } from '../types';
+import { DocumentParseResult, APIConfig } from '../types';
 
 interface DocumentUploaderProps {
   /** 文档上传完成回调 */
   onUploadComplete: (result: DocumentParseResult) => void;
   /** 是否正在处理 */
   loading?: boolean;
+  /** API配置，用于AI增强标题生成 */
+  apiConfig?: APIConfig | null;
 }
 
 const DocumentUploader: React.FC<DocumentUploaderProps> = ({
   onUploadComplete,
   loading = false,
+  apiConfig,
 }) => {
   // 状态管理
   const [uploadMethod, setUploadMethod] = useState<'file' | 'url' | 'text'>('file');
@@ -185,14 +188,19 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     updateProcessingStatus(true, '正在解析文本...', 'info');
     
     try {
+      // 首先进行基础解析
       const result = await parseDocument(text);
       
-      if (validateParseResult(result)) {
-        updateProcessingStatus(false, '文本解析成功！', 'success');
-        onUploadComplete(result);
-      } else {
+      if (!validateParseResult(result)) {
         updateProcessingStatus(false, '文本解析失败，请检查内容格式', 'error');
+        return;
       }
+
+      // 注意：标题生成现在集成在大纲生成阶段进行，这里不再单独调用AI
+      
+      updateProcessingStatus(false, '文本解析成功！', 'success');
+      onUploadComplete(result);
+      
     } catch (error) {
       updateProcessingStatus(
         false, 

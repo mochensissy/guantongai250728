@@ -421,7 +421,7 @@ const CardManager: React.FC<CardManagerProps> = ({
 
         {/* 卡片内容 */}
         <div className="mb-3">
-          <h4 className="font-medium text-gray-900 text-sm mb-2 line-clamp-2">
+          <h4 className="font-medium text-gray-900 text-sm mb-2 line-clamp-2 leading-relaxed">
             {card.title || '无标题'}
           </h4>
           <div 

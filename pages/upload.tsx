@@ -84,6 +84,12 @@ const UploadPage: React.FC = () => {
       );
 
       if (outlineResponse.success) {
+        // 如果AI生成了新标题，更新result.title
+        if (outlineResponse.generatedTitle) {
+          result.title = outlineResponse.generatedTitle;
+          console.log('使用AI生成的标题:', outlineResponse.generatedTitle);
+        }
+        
         // 重新排序章节，确保编号连续
         const chapters = outlineResponse.outline.filter(item => item.type === 'chapter');
         const sections = outlineResponse.outline.filter(item => item.type === 'section');
@@ -328,6 +334,7 @@ const UploadPage: React.FC = () => {
             <DocumentUploader
               onUploadComplete={handleDocumentUploaded}
               loading={isGeneratingOutline}
+              apiConfig={apiConfig}
             />
 
             {isGeneratingOutline && (

@@ -545,14 +545,127 @@ const parseMarkdown = (content: string): DocumentParseResult => {
 };
 
 /**
+ * 从文本内容智能生成标题
+ * 通过分析文本结构和关键词来生成合适的标题
+ */
+const generateTitleFromText = (content: string): string => {
+  if (!content || content.trim().length === 0) {
+    return '文本内容';
+  }
+
+  const text = content.trim();
+  
+  // 1. 尝试提取明显的标题模式
+  const titlePatterns = [
+    /^(.{4,30})\n[\s]*[-=]{3,}/, // 下划线标题
+    /^#{1,3}\s*(.{4,30})/, // Markdown标题
+    /^(.{4,30})\n\n/, // 首行后有空行
+    /^【(.{2,20})】/, // 中文标题括号
+    /^《(.{2,20})》/, // 书名号标题
+    /^第[一二三四五六七八九十\d]+[章节课讲部分]\s*(.{2,30})/, // 章节标题
+    /^(\d+[\.\、]\s*.{4,30})/, // 数字编号标题
+  ];
+
+  for (const pattern of titlePatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      let title = match[1].trim();
+      // 清理标题
+      title = title.replace(/[。！？\.!?]+$/, ''); // 移除结尾标点
+      title = title.replace(/^(关于|论|浅谈|深入理解|学习)/, ''); // 移除常见前缀
+      if (title.length >= 4 && title.length <= 30) {
+        return title;
+      }
+    }
+  }
+
+  // 2. 尝试提取关键主题词
+  const keywordPatterns = [
+    /([^。，！？\n]{4,20})(?:是什么|的概念|的定义|简介|概述)/, // 概念介绍
+    /(?:什么是|关于)([^。，！？\n]{4,20})/, // 什么是...
+    /([^。，！？\n]{4,20})(?:的特点|的优势|的作用|的意义)/, // 特征描述
+    /([^。，！？\n]{4,20})(?:分析|研究|探讨|讨论)/, // 分析类
+    /([^。，！？\n]{4,20})(?:方法|技术|技巧|策略)/, // 方法类
+    /([^。，！？\n]{4,20})(?:原理|机制|过程|流程)/, // 原理类
+    /如何([^。，！？\n]{4,20})/, // 如何...
+    /([^。，！？\n]{4,20})教程/, // 教程类
+  ];
+
+  for (const pattern of keywordPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      let keyword = match[1].trim();
+      // 清理关键词
+      keyword = keyword.replace(/^(学习|了解|掌握|认识)/, '');
+      keyword = keyword.replace(/(的内容|相关|方面)$/, '');
+      if (keyword.length >= 3 && keyword.length <= 20) {
+        return keyword;
+      }
+    }
+  }
+
+  // 3. 提取文本开头的关键句子作为标题
+  const sentences = text.split(/[。！？\n]/).filter(s => s.trim().length > 0);
+  if (sentences.length > 0) {
+    let firstSentence = sentences[0].trim();
+    
+    // 移除常见的开场白
+    firstSentence = firstSentence.replace(/^(大家好|各位|同学们|朋友们|今天|现在|首先|那么)[，,]?\s*/, '');
+    firstSentence = firstSentence.replace(/^(我们来|让我们|下面|接下来)[，,]?\s*(学习|了解|看看|讨论)\s*/, '');
+    
+    // 如果句子长度合适，使用它作为标题
+    if (firstSentence.length >= 6 && firstSentence.length <= 25) {
+      return firstSentence;
+    }
+    
+    // 如果第一句太长，尝试截取前面有意义的部分
+    if (firstSentence.length > 25) {
+      const cutPoints = [
+        /^(.{8,22})[，,]/, // 在逗号处截断
+        /^(.{8,22})(?=的|是|为)/, // 在关键词前截断
+        /^(.{8,22})(?=\s)/, // 在空格处截断
+      ];
+      
+      for (const cutPattern of cutPoints) {
+        const cutMatch = firstSentence.match(cutPattern);
+        if (cutMatch && cutMatch[1]) {
+          return cutMatch[1].trim();
+        }
+      }
+      
+      // 最后的备用方案：取前20个字符
+      return firstSentence.substring(0, 20).replace(/[，。！？]*$/, '');
+    }
+  }
+
+  // 4. 最终备用方案：提取文本中最常见的词汇组合
+  const words = text.replace(/[^\u4e00-\u9fa5\w\s]/g, ' ').split(/\s+/).filter(w => w.length >= 2);
+  if (words.length >= 2) {
+    // 取前几个有意义的词汇
+    const meaningfulWords = words.slice(0, 3).join('');
+    if (meaningfulWords.length >= 4 && meaningfulWords.length <= 15) {
+      return meaningfulWords;
+    }
+  }
+
+  // 如果所有方法都失败，返回默认标题
+  return '文本内容';
+};
+
+/**
  * 解析纯文本内容
+ * 智能生成标题并返回解析结果
  */
 const parseText = (content: string): DocumentParseResult => {
   const trimmedContent = content.trim();
   
+  // 生成智能标题
+  const title = generateTitleFromText(trimmedContent);
+  
   return {
     success: true,
     content: trimmedContent,
+    title,
     metadata: {
       wordCount: trimmedContent.split(/\s+/).length,
     },
