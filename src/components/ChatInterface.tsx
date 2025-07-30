@@ -13,7 +13,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2, Lightbulb, Star } from 'lucide-react';
 import { marked } from 'marked';
 import Button from './ui/Button';
-import { ChatMessage } from '../types';
+import { ChatMessage, LearningLevel } from '../types';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface ChatInterfaceProps {
   /** 对话消息列表 */
@@ -28,6 +29,8 @@ interface ChatInterfaceProps {
   placeholder?: string;
   /** 是否禁用输入 */
   disabled?: boolean;
+  /** 学习模式（用于UI差异化） */
+  learningLevel?: LearningLevel;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -37,6 +40,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   loading = false,
   placeholder = '输入您的问题...',
   disabled = false,
+  learningLevel = 'beginner',
 }) => {
   // 状态管理
   const [inputValue, setInputValue] = useState('');
@@ -48,6 +52,97 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // 引用
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // 主题相关
+  const { currentTheme } = useTheme();
+
+  /**
+   * 根据消息内容长度获取合适的最大宽度
+   */
+  const getMessageMaxWidth = (content: string): string => {
+    const length = content.length;
+    if (length <= 20) return 'max-w-[35%]';      // 短消息
+    if (length <= 50) return 'max-w-[50%]';      // 中等消息
+    if (length <= 100) return 'max-w-[65%]';     // 较长消息
+    return 'max-w-[80%]';                        // 长消息
+  };
+
+  /**
+   * 获取消息容器样式（根据学习模式差异化）
+   */
+  const getMessageContainerStyle = (isUser: boolean, content: string) => {
+    const maxWidth = getMessageMaxWidth(content);
+    const baseStyle = `${maxWidth} px-4 py-3 shadow-sm transition-all duration-200`;
+    
+    if (learningLevel === 'beginner') {
+      // 小白模式：圆润友好的设计
+      if (isUser) {
+        return `${baseStyle} bg-[var(--color-primary-600)] text-white rounded-t-2xl rounded-bl-2xl rounded-br-lg ml-auto`;
+      } else {
+        return `${baseStyle} bg-[var(--surface-primary)] border border-[var(--border-secondary)] rounded-t-2xl rounded-br-2xl rounded-bl-lg mr-auto`;
+      }
+    } else {
+      // 高手模式：专业锐利的设计
+      if (isUser) {
+        return `${baseStyle} bg-[var(--color-primary-600)] text-white rounded-lg ml-auto`;
+      } else {
+        return `${baseStyle} bg-[var(--surface-primary)] border border-[var(--border-secondary)] rounded-lg mr-auto`;
+      }
+    }
+  };
+
+  /**
+   * 获取头像样式（根据学习模式差异化）
+   */
+  const getAvatarStyle = (isUser: boolean) => {
+    const baseStyle = 'w-8 h-8 flex items-center justify-center text-white flex-shrink-0';
+    
+    if (learningLevel === 'beginner') {
+      // 小白模式：圆润设计
+      if (isUser) {
+        return `${baseStyle} rounded-full bg-[var(--color-primary-600)]`;
+      } else {
+        return `${baseStyle} rounded-full bg-[var(--color-secondary-600)]`;
+      }
+    } else {
+      // 高手模式：更加锐利的设计
+      if (isUser) {
+        return `${baseStyle} rounded-lg bg-[var(--color-primary-600)]`;
+      } else {
+        return `${baseStyle} rounded-lg bg-[var(--color-secondary-600)]`;
+      }
+    }
+  };
+
+  /**
+   * 获取输入框样式（根据学习模式差异化）
+   */
+  const getInputContainerStyle = () => {
+    const baseStyle = 'border-2 bg-[var(--surface-primary)] transition-all duration-200 focus-within:border-[var(--border-focus)]';
+    
+    if (learningLevel === 'beginner') {
+      // 小白模式：圆润的输入框
+      return `${baseStyle} rounded-2xl border-[var(--border-primary)]`;
+    } else {
+      // 高手模式：锐利的输入框
+      return `${baseStyle} rounded-lg border-[var(--border-primary)]`;
+    }
+  };
+
+  /**
+   * 获取发送按钮样式（根据学习模式差异化）
+   */
+  const getSendButtonStyle = () => {
+    const baseStyle = 'bg-[var(--color-primary-600)] hover:bg-[var(--color-primary-700)] text-white transition-all duration-200 flex items-center justify-center';
+    
+    if (learningLevel === 'beginner') {
+      // 小白模式：圆形按钮
+      return `${baseStyle} w-10 h-10 rounded-full`;
+    } else {
+      // 高手模式：方形按钮
+      return `${baseStyle} w-10 h-10 rounded-lg`;
+    }
+  };
 
   /**
    * 配置marked选项
@@ -290,13 +385,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         } ${isSystem ? 'justify-center' : ''}`}
       >
         {!isSystem && (
-          <div className={`
-            flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center
-            ${isUser 
-              ? 'bg-primary-600 text-white' 
-              : 'bg-secondary-100 text-secondary-700'
-            }
-          `}>
+          <div className={getAvatarStyle(isUser)}>
             {isUser ? (
               <User className="w-4 h-4" />
             ) : (
@@ -306,16 +395,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
 
         <div className={`flex-1 ${isUser ? 'text-right' : ''} ${isSystem ? 'text-center' : ''}`}>
-          <div className={`
-            inline-block max-w-[80%] p-3 rounded-lg text-sm leading-relaxed
-            ${isAssistant ? 'relative group' : ''}
-            ${isUser 
-              ? 'bg-primary-600 text-white rounded-br-sm' 
-              : isSystem
-              ? 'bg-yellow-50 text-yellow-800 border border-yellow-200'
-              : 'bg-gray-100 text-gray-900 rounded-bl-sm'
-            }
-          `}>
+          <div className={
+            isSystem 
+              ? 'inline-block bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-lg px-3 py-2 text-sm'
+              : `${getMessageContainerStyle(isUser, message.content)} text-sm leading-relaxed ${isAssistant ? 'relative group' : ''}`
+          }>
             
             {/* 消息内容 */}
             {isUser || isSystem ? (
@@ -449,7 +533,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* 输入区域 */}
       <div className="border-t border-gray-200 p-4 flex-shrink-0">
-        <div className="flex items-end gap-3">
+        <div className={`flex items-end gap-3 ${getInputContainerStyle()} p-2`}>
           {/* 输入框 */}
           <div className="flex-1">
             <textarea
@@ -461,27 +545,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               disabled={disabled || loading}
               rows={1}
               className="
-                w-full px-4 py-3 border border-gray-300 rounded-lg resize-none
-                focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                w-full px-3 py-2 bg-transparent border-none resize-none
+                focus:outline-none
                 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed
-                text-sm leading-relaxed transition-colors duration-200
+                text-sm leading-relaxed transition-colors duration-200 text-[var(--text-primary)]
+                placeholder-[var(--text-tertiary)]
               "
-              style={{ minHeight: '48px', maxHeight: '120px' }}
+              style={{ minHeight: '44px', maxHeight: '120px' }}
             />
           </div>
 
           {/* 发送按钮 */}
-          <Button
-            variant="primary"
-            size="lg"
+          <button
             onClick={handleSendMessage}
             disabled={!inputValue.trim() || loading || disabled}
-            loading={loading}
-            icon={loading ? <Loader2 className="w-4 h-4" /> : <Send className="w-4 h-4" />}
-            className="flex-shrink-0"
+            className={`
+              ${getSendButtonStyle()}
+              disabled:opacity-50 disabled:cursor-not-allowed
+            `}
           >
-            发送
-          </Button>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </button>
         </div>
 
         {/* 提示文本 */}

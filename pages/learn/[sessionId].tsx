@@ -16,6 +16,7 @@ import ResizablePanel from '../../src/components/ResizablePanel';
 import OutlineEditor from '../../src/components/OutlineEditor';
 import ChatInterface from '../../src/components/ChatInterface';
 import CardManager from '../../src/components/CardManager';
+import { ThemeProvider } from '../../src/contexts/ThemeContext';
 import { 
   LearningSession, 
   ChatMessage, 
@@ -205,12 +206,34 @@ const LearnPage: React.FC = () => {
       }
     } catch (error) {
       console.error('发送消息失败:', error);
+      console.error('完整错误信息:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        apiConfig: apiConfig,
+        sessionInfo: {
+          id: session.id,
+          messagesCount: session.messages.length,
+          learningLevel: session.learningLevel,
+        }
+      });
       
-      // 创建错误消息
+      // 创建详细的错误消息
+      const errorDetails = error instanceof Error ? error.message : '未知错误';
       const errorMessage: ChatMessage = {
         id: generateMessageId(),
         role: 'system',
-        content: `发送失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        content: `❌ AI回复失败：${errorDetails}
+
+可能的原因：
+• API密钥无效或已过期
+• 网络连接问题
+• AI服务暂时不可用
+• 请求内容超过限制
+
+建议操作：
+• 检查API配置是否正确
+• 稍后重试
+• 联系技术支持`,
         timestamp: Date.now(),
       };
 
@@ -266,7 +289,7 @@ const LearnPage: React.FC = () => {
     
     // 2. 检查AI是否明确提到了具体的小节编号
     console.log('AI回复内容:', aiResponse);
-    const aiSectionPattern = /(?:现在|开始|进入|学习|讲解|探讨).*?(\d+\.\d+)(?:小节|节)?/g;
+    const aiSectionPattern = /(?:现在|开始|进入|学习|讲解|探讨|来看|接下来|我们来|先看|首先|然后).*?(\d+\.\d+)(?:小节|节|章|部分)?/g;
     const aiSectionMatches = [...aiResponse.matchAll(aiSectionPattern)];
     console.log('AI小节匹配结果:', aiSectionMatches);
     
@@ -294,6 +317,33 @@ const LearnPage: React.FC = () => {
         updateSessionCurrentChapter(sessionData.id, targetSection.id);
         setSession(prev => prev ? { ...prev, currentChapter: targetSection.id } : null);
         return; // 找到明确的小节，直接返回
+      }
+    }
+
+    // 3. 尝试简单的数字模式匹配 (如 "1.2" 这样的独立数字)
+    const simpleNumberPattern = /(\d+\.\d+)/g;
+    const simpleMatches = [...aiResponse.matchAll(simpleNumberPattern)];
+    
+    if (simpleMatches.length > 0) {
+      // 检查每个数字是否对应大纲中的小节
+      for (const match of simpleMatches) {
+        const sectionNumber = match[1];
+        const targetSection = sessionData.outline.find(item => 
+          item.type === 'section' && item.title.includes(sectionNumber)
+        );
+        
+        if (targetSection && sessionData.currentChapter !== targetSection.id) {
+          console.log(`通过数字模式匹配到小节 ${sectionNumber}，切换到:`, targetSection.title);
+          
+          // 在切换到新小节之前，先标记当前小节为完成
+          if (sessionData.currentChapter) {
+            await handleMarkChapterCompleted(sessionData.currentChapter);
+          }
+          
+          updateSessionCurrentChapter(sessionData.id, targetSection.id);
+          setSession(prev => prev ? { ...prev, currentChapter: targetSection.id } : null);
+          return;
+        }
       }
     }
     
@@ -624,9 +674,10 @@ const LearnPage: React.FC = () => {
   }
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col">
-      {/* 顶部导航栏 */}
-      <header className="bg-white border-b border-gray-200 flex-shrink-0">
+    <ThemeProvider initialLevel={session.learningLevel}>
+      <div className="h-screen bg-[var(--bg-primary)] flex flex-col">
+        {/* 顶部导航栏 */}
+        <header className="bg-[var(--surface-primary)] border-b border-[var(--border-secondary)] flex-shrink-0">
         <div className="flex items-center justify-between h-16 px-6">
           {/* 左侧信息 */}
           <div className="flex items-center gap-4">
@@ -682,12 +733,12 @@ const LearnPage: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         <div className="flex w-full">
           {/* 左侧大纲面板 */}
-          <div className="w-1/4 min-w-[250px] max-w-[400px] h-full bg-white border-r border-gray-200 flex flex-col">
+          <div className="w-1/4 min-w-[250px] max-w-[400px] h-full bg-[var(--surface-primary)] border-r border-[var(--border-secondary)] flex flex-col">
             {/* 大纲头部 */}
-            <div className="p-6 border-b border-gray-200 flex-shrink-0">
+            <div className="p-6 border-b border-[var(--border-secondary)] flex-shrink-0">
               <div className="flex items-center gap-2 mb-4">
-                <BookOpen className="w-5 h-5 text-primary-600" />
-                <h2 className="text-lg font-semibold text-gray-900">学习大纲</h2>
+                <BookOpen className="w-5 h-5 text-[var(--color-primary-600)]" />
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">学习大纲</h2>
               </div>
               
               {/* 进度信息 */}
@@ -753,19 +804,40 @@ const LearnPage: React.FC = () => {
           </div>
 
           {/* 中间聊天界面 */}
-          <div className="flex-1 h-full flex flex-col bg-white overflow-hidden">
+          <div className="flex-1 h-full flex flex-col bg-[var(--surface-primary)] overflow-hidden">
             {/* 聊天头部 */}
-            <div className="flex-shrink-0 p-4 border-b border-gray-200">
+            <div className="flex-shrink-0 p-4 border-b border-[var(--border-secondary)]">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-secondary-500 to-secondary-600 rounded-full flex items-center justify-center">
-                  <MessageCircle className="w-5 h-5 text-white" />
+                <div className={`
+                  w-10 h-10 bg-gradient-to-br flex items-center justify-center
+                  ${session.learningLevel === 'beginner' 
+                    ? 'from-[var(--color-primary-500)] to-[var(--color-primary-600)] rounded-full' 
+                    : 'from-[var(--color-secondary-500)] to-[var(--color-secondary-600)] rounded-lg'
+                  }
+                `}>
+                  {session.learningLevel === 'beginner' ? (
+                    <User className="w-5 h-5 text-white" />
+                  ) : (
+                    <Zap className="w-5 h-5 text-white" />
+                  )}
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">AI私教助手</h3>
-                  <p className="text-sm text-gray-500">
+                  <h3 className="font-semibold text-[var(--text-primary)]">
+                    AI私教助手
+                    <span className={`
+                      ml-2 px-2 py-1 text-xs font-medium rounded-full
+                      ${session.learningLevel === 'beginner' 
+                        ? 'bg-[var(--color-primary-100)] text-[var(--color-primary-700)]' 
+                        : 'bg-[var(--color-secondary-100)] text-[var(--color-secondary-700)]'
+                      }
+                    `}>
+                      {session.learningLevel === 'beginner' ? '小白模式' : '高手模式'}
+                    </span>
+                  </h3>
+                  <p className="text-sm text-[var(--text-secondary)]">
                     {session.learningLevel === 'beginner' 
-                      ? '耐心引导模式，循序渐进' 
-                      : '高效学习模式，直击重点'
+                      ? '🌱 耐心引导模式，循序渐进，用心陪伴每一步' 
+                      : '⚡ 高效学习模式，直击重点，快速掌握核心'
                     }
                   </p>
                 </div>
@@ -781,6 +853,7 @@ const LearnPage: React.FC = () => {
                 loading={isSendingMessage}
                 placeholder="输入您的问题或回应..."
                 disabled={isSendingMessage}
+                learningLevel={session.learningLevel}
               />
             </div>
           </div>
@@ -796,6 +869,7 @@ const LearnPage: React.FC = () => {
         </div>
       </div>
     </div>
+    </ThemeProvider>
   );
 };
 
