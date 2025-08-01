@@ -1,3 +1,31 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 强制文本换行的样式 */
+@layer utilities {
+  .word-break {
+    word-break: break-word;
+  }
+  
+  .overflow-wrap-anywhere {
+    overflow-wrap: anywhere;
+  }
+  
+  /* 确保聊天消息内容正确换行 */
+  .chat-content {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    white-space: pre-line; /* 改为pre-line，保留换行但折叠多余空格 */
+    max-width: 100%;
+    overflow: hidden;
+  }
+  
+  /* 处理长URL和代码的换行 */
+  .chat-content a,
+  .chat-content code,
+  .chat-content pre {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+}

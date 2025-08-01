@@ -28,7 +28,7 @@ interface DocumentUploaderProps {
 const DocumentUploader: React.FC<DocumentUploaderProps> = ({
   onUploadComplete,
   loading = false,
-  apiConfig,
+  // apiConfig, // 暂时未使用，保留用于未来功能扩展
 }) => {
   // 状态管理
   const [uploadMethod, setUploadMethod] = useState<'file' | 'url' | 'text'>('file');
@@ -39,10 +39,12 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     isProcessing: boolean;
     message: string;
     type: 'info' | 'success' | 'error';
+    progress?: number; // 新增进度字段
   }>({
     isProcessing: false,
     message: '',
     type: 'info',
+    progress: 0,
   });
 
   // 文件输入引用
@@ -69,9 +71,10 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
   const updateProcessingStatus = (
     isProcessing: boolean, 
     message: string, 
-    type: 'info' | 'success' | 'error' = 'info'
+    type: 'info' | 'success' | 'error' = 'info',
+    progress?: number
   ) => {
-    setProcessingStatus({ isProcessing, message, type });
+    setProcessingStatus({ isProcessing, message, type, progress });
   };
 
   /**
@@ -110,22 +113,28 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
       return;
     }
 
-    updateProcessingStatus(true, '正在解析文件...', 'info');
+    updateProcessingStatus(true, '正在准备解析文件...', 'info', 0);
     
     try {
-      const result = await parseDocument(file);
+      // 定义进度回调函数
+      const progressCallback = (progress: number, status: string) => {
+        updateProcessingStatus(true, status, 'info', Math.round(progress));
+      };
+      
+      const result = await parseDocument(file, undefined, progressCallback);
       
       if (validateParseResult(result)) {
-        updateProcessingStatus(false, '文件解析成功！', 'success');
+        updateProcessingStatus(false, '文件解析成功！', 'success', 100);
         onUploadComplete(result);
       } else {
-        updateProcessingStatus(false, '文件解析失败，请检查文件格式', 'error');
+        updateProcessingStatus(false, '文件解析失败，请检查文件格式', 'error', 0);
       }
     } catch (error) {
       updateProcessingStatus(
         false, 
         `文件处理失败: ${error instanceof Error ? error.message : '未知错误'}`, 
-        'error'
+        'error',
+        0
       );
     }
   };
@@ -449,26 +458,44 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
             ? 'bg-red-50 border border-red-200'
             : 'bg-blue-50 border border-blue-200'
         }`}>
-          <div className="flex items-center gap-3">
-            {processingStatus.type === 'success' ? (
-              <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-            ) : processingStatus.type === 'error' ? (
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-            ) : (
-              <div className="w-5 h-5 flex-shrink-0">
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              {processingStatus.type === 'success' ? (
+                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+              ) : processingStatus.type === 'error' ? (
+                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+              ) : (
+                <div className="w-5 h-5 flex-shrink-0">
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                </div>
+              )}
+              
+              <span className={`text-sm font-medium ${
+                processingStatus.type === 'success' 
+                  ? 'text-green-900' 
+                  : processingStatus.type === 'error'
+                  ? 'text-red-900'
+                  : 'text-blue-900'
+              }`}>
+                {processingStatus.message}
+              </span>
+            </div>
+            
+            {/* 进度条 - 仅在处理中且有进度数据时显示 */}
+            {processingStatus.isProcessing && typeof processingStatus.progress === 'number' && (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-gray-600">解析进度</span>
+                  <span className="text-gray-900 font-medium">{processingStatus.progress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${Math.max(0, Math.min(100, processingStatus.progress))}%` }}
+                  ></div>
+                </div>
               </div>
             )}
-            
-            <span className={`text-sm font-medium ${
-              processingStatus.type === 'success' 
-                ? 'text-green-900' 
-                : processingStatus.type === 'error'
-                ? 'text-red-900'
-                : 'text-blue-900'
-            }`}>
-              {processingStatus.message}
-            </span>
           </div>
         </div>
       )}

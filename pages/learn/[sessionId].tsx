@@ -33,7 +33,7 @@ import {
   markChapterCompleted,
   addLearningCard
 } from '../../src/utils/storage';
-import { sendChatMessage, summarizeCardTitle, purifyCardContent } from '../../src/utils/aiService';
+import { sendChatMessage, summarizeCardTitle, purifyCardContent, fixExistingOutline } from '../../src/utils/aiService';
 
 const LearnPage: React.FC = () => {
   const router = useRouter();
@@ -483,6 +483,45 @@ const LearnPage: React.FC = () => {
   };
 
   /**
+   * 修复大纲数据，确保每个章节都有小节
+   */
+  const handleFixOutline = () => {
+    if (!session) return;
+
+    try {
+      console.log('🔧 【新强化版】开始修复大纲数据...');
+      console.log('📋 修复前的大纲项目:', session.outline.length, '个');
+      session.outline.forEach((item, index) => {
+        console.log(`  ${index}: ${item.type} - "${item.title}" (parentChapter: ${item.parentChapter})`);
+      });
+      
+      const fixedOutline = fixExistingOutline(session.outline);
+      
+      console.log('📋 修复后的大纲项目:', fixedOutline.length, '个');
+      fixedOutline.forEach((item, index) => {
+        console.log(`  ${index}: ${item.type} - "${item.title}" (parentChapter: ${item.parentChapter})`);
+      });
+      
+      const updatedSession = {
+        ...session,
+        outline: fixedOutline
+      };
+
+      // 保存到localStorage
+      saveSession(updatedSession);
+      
+      // 更新本地状态
+      setSession(updatedSession);
+      
+      console.log('✅ 【新强化版】大纲修复完成');
+      alert('✅ 大纲修复完成！使用了新的强化重组算法。请查看控制台日志了解详细过程。');
+    } catch (error) {
+      console.error('❌ 修复大纲失败:', error);
+      alert('修复大纲失败，请稍后重试。');
+    }
+  };
+
+  /**
    * 处理章节点击
    */
   const handleChapterClick = (chapterId: string) => {
@@ -766,6 +805,21 @@ const LearnPage: React.FC = () => {
                     当前：{session.outline.find(item => item.id === session.currentChapter)?.title}
                   </p>
                 )}
+                
+                {/* 修复大纲按钮 */}
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleFixOutline}
+                    className="w-full text-xs"
+                  >
+                    🔧 修复大纲（新强化版）
+                  </Button>
+                  <p className="text-xs text-gray-500 mt-1">
+                    彻底重组章节结构，解决错位问题
+                  </p>
+                </div>
               </div>
             </div>
 

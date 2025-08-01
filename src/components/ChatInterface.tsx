@@ -72,7 +72,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
    */
   const getMessageContainerStyle = (isUser: boolean, content: string) => {
     const maxWidth = getMessageMaxWidth(content);
-    const baseStyle = `${maxWidth} px-4 py-3 shadow-sm transition-all duration-200`;
+    const baseStyle = `${maxWidth} px-4 py-3 shadow-sm transition-all duration-200 break-words overflow-hidden`;
     
     if (learningLevel === 'beginner') {
       // 小白模式：圆润友好的设计
@@ -237,8 +237,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
    */
   const renderMarkdown = (content: string): string => {
     try {
-      const result = marked(content);
-      return typeof result === 'string' ? result : content;
+      let result = marked(content);
+      if (typeof result === 'string') {
+        // 清理Markdown渲染产生的多余空白
+        result = result
+          .replace(/<p>\s*<\/p>/g, '')           // 移除空的p标签
+          .replace(/>\s+</g, '><')               // 移除标签之间的空白
+          .replace(/\n\s*\n\s*\n/g, '\n\n')     // 限制连续空行
+          .replace(/^\s+|\s+$/g, '');           // 移除首尾空白
+        return result;
+      }
+      return content;
     } catch (error) {
       console.error('Markdown渲染失败:', error);
       return content;
@@ -394,7 +403,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         )}
 
-        <div className={`flex-1 ${isUser ? 'text-right' : ''} ${isSystem ? 'text-center' : ''}`}>
+        <div className={`flex-1 min-w-0 ${isUser ? 'text-right' : ''} ${isSystem ? 'text-center' : ''}`}>
           <div className={
             isSystem 
               ? 'inline-block bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-lg px-3 py-2 text-sm'
@@ -403,12 +412,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             
             {/* 消息内容 */}
             {isUser || isSystem ? (
-              <div className="whitespace-pre-wrap break-words">
+              <div className="chat-content">
                 {message.content}
               </div>
             ) : (
               <div 
-                className="prose prose-sm max-w-none break-words"
+                className="prose prose-sm max-w-none chat-content [&>*]:break-words [&>*]:overflow-wrap-anywhere"
                 dangerouslySetInnerHTML={{ 
                   __html: renderMarkdown(message.content) 
                 }}

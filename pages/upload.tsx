@@ -15,8 +15,15 @@ import dynamic from 'next/dynamic';
 import Button from '../src/components/ui/Button';
 import OutlineEditor from '../src/components/OutlineEditor';
 import { DocumentParseResult, OutlineItem, LearningSession, APIConfig } from '../src/types';
-import { generateOutline } from '../src/utils/aiService';
+import { generateOutline, fixExistingOutline } from '../src/utils/aiService';
 import { saveSession, getAPIConfig } from '../src/utils/storage';
+
+/**
+ * 生成唯一ID
+ */
+const generateId = (): string => {
+  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+};
 
 // 动态导入DocumentUploader组件，禁用SSR
 const DocumentUploader = dynamic(() => import('../src/components/DocumentUploader'), {
@@ -90,65 +97,31 @@ const UploadPage: React.FC = () => {
           console.log('使用AI生成的标题:', outlineResponse.generatedTitle);
         }
         
-        // 重新排序章节，确保编号连续
-        const chapters = outlineResponse.outline.filter(item => item.type === 'chapter');
-        const sections = outlineResponse.outline.filter(item => item.type === 'section');
+        console.log('🔧 AI生成大纲后，立即应用强制重建...');
         
-        // 为章节重新分配连续的编号
-        const chapterMapping = new Map<number, number>(); // 原编号 -> 新编号
-        chapters.forEach((chapter: any, index) => {
-          const oldChapterNumber = chapter.chapterNumber || (index + 1);
-          const newChapterNumber = index + 1;
-          chapterMapping.set(oldChapterNumber, newChapterNumber);
-        });
-
-        console.log('章节编号映射:', Array.from(chapterMapping.entries()));
-
-        // 生成章节ID映射
-        const chapterIdMap = new Map<number, string>();
-        chapters.forEach((chapter: any, index) => {
-          const newChapterNumber = index + 1;
-          chapterIdMap.set(chapter.chapterNumber || (index + 1), `chapter-${newChapterNumber}`);
-        });
-
-        console.log('章节ID映射:', Array.from(chapterIdMap.entries()));
-
-        const outlineWithIds = outlineResponse.outline.map((item: any, index) => {
+        // 使用强制重建逻辑修复AI生成的大纲
+        const fixedOutline = fixExistingOutline(outlineResponse.outline);
+        
+        // 为修复后的大纲添加必要的ID
+        const outlineWithIds = fixedOutline.map((item: any, index) => {
           const baseItem: any = {
             ...item,
             order: index + 1,
           };
 
           if (item.type === 'chapter') {
-            // 为章节分配新的连续编号
-            const chapterIndex = chapters.findIndex(c => c === item);
-            const newChapterNumber = chapterIndex + 1;
-            baseItem.id = `chapter-${newChapterNumber}`;
-            baseItem.chapterNumber = newChapterNumber;
-            // 更新标题中的章节编号
-            baseItem.title = item.title.replace(/第\d+章/, `第${newChapterNumber}章`);
+            baseItem.id = `chapter-${item.chapterNumber || index + 1}`;
           } else if (item.type === 'section') {
-            // 为小节设置正确的parentId
-            baseItem.id = `section-${item.order || index + 1}`;
+            baseItem.id = `section-${index + 1}`;
             if (item.parentChapter) {
-              baseItem.parentId = chapterIdMap.get(item.parentChapter);
-              // 更新小节编号以匹配新的章节编号
-              const newChapterNumber = chapterMapping.get(item.parentChapter);
-              if (newChapterNumber) {
-                const sectionMatch = item.title.match(/(\d+)\.(\d+)/);
-                if (sectionMatch) {
-                  const sectionNumber = sectionMatch[2];
-                  baseItem.title = item.title.replace(/\d+\.\d+/, `${newChapterNumber}.${sectionNumber}`);
-                }
-              }
+              baseItem.parentId = `chapter-${item.parentChapter}`;
             }
           }
 
           return baseItem;
         });
         
-        console.log('生成的大纲:', outlineWithIds);
-        console.log('章节映射:', chapterIdMap);
+        console.log('✅ 强制重建后的大纲:', outlineWithIds);
         
         setOutline(outlineWithIds);
         setCurrentStep('outline');

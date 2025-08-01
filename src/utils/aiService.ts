@@ -202,9 +202,871 @@ const analyzeDocumentStructure = (content: string, wordCount: number) => {
 };
 
 /**
+ * 修复常见的JSON语法错误
+ * @param jsonString 原始JSON字符串
+ * @returns 修复后的JSON字符串
+ */
+const fixCommonJsonErrors = (jsonString: string): string => {
+  console.log('🔧 开始JSON修复，原始长度:', jsonString.length);
+  console.log('🔧 原始内容前800字符:', jsonString.substring(0, 800));
+  console.log('🔧 原始内容后800字符:', jsonString.substring(jsonString.length - 800));
+  
+  let fixed = jsonString;
+  let fixCount = 0;
+  
+  // 1. 最常见问题：在数组中，对象之间缺少逗号
+  // 匹配 } 后面直接跟 { 的情况（可能有空白字符或换行）
+  fixed = fixed.replace(/}\s*\n\s*{/g, () => {
+    fixCount++;
+    return '},\n{';
+  });
+  
+  // 2. 同一行的对象之间缺少逗号
+  fixed = fixed.replace(/}\s*{/g, () => {
+    fixCount++;
+    return '}, {';
+  });
+  
+  // 3. 修复多余的逗号（JSON末尾的逗号）
+  fixed = fixed.replace(/,(\s*[}\]])/g, '$1');
+  
+  // 4. 特殊情况：检查错误位置附近的内容
+  if (jsonString.length > 4800) {
+    const errorArea = jsonString.substring(4800, 4900);
+    console.log('🔧 错误位置附近内容:', errorArea);
+    
+    // 查找错误位置附近的模式
+    const problemPatterns = [
+      /}\s*\n\s*"/g,  // } 后面直接跟属性（应该是新对象）
+      /}\s*\n\s*[a-zA-Z]/g,  // } 后面直接跟字母（缺少引号）
+    ];
+    
+    problemPatterns.forEach((pattern, index) => {
+      if (pattern.test(errorArea)) {
+        console.log(`🔧 检测到问题模式 ${index + 1}`);
+      }
+    });
+  }
+  
+  // 5. 针对特定错误位置的修复
+  // 查找所有 } 的位置，检查后面是否应该有逗号
+  const lines = fixed.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line === '}' && i < lines.length - 1) {
+      const nextLine = lines[i + 1].trim();
+      // 如果下一行以 { 开头，说明需要逗号
+      if (nextLine.startsWith('{')) {
+        lines[i] = lines[i].replace('}', '},');
+        fixCount++;
+        console.log(`🔧 在第 ${i + 1} 行修复了缺少的逗号`);
+      }
+    }
+  }
+  fixed = lines.join('\n');
+  
+  console.log('🔧 总共修复了', fixCount, '个问题');
+  console.log('🔧 修复后长度:', fixed.length);
+  console.log('🔧 修复后内容前800字符:', fixed.substring(0, 800));
+  console.log('🔧 修复后内容后800字符:', fixed.substring(fixed.length - 800));
+  
+  return fixed;
+};
+
+/**
+ * 基于错误位置精准修复JSON
+ * @param jsonString 原始JSON字符串
+ * @param errorMessage 错误信息
+ * @returns 修复后的JSON字符串
+ */
+const fixJsonByErrorPosition = (jsonString: string, errorMessage: string): string => {
+  console.log('🎯 开始精准修复JSON，错误信息:', errorMessage);
+  
+  // 解析错误位置信息
+  const positionMatch = errorMessage.match(/position (\d+)/);
+  const lineMatch = errorMessage.match(/line (\d+)/);
+  const columnMatch = errorMessage.match(/column (\d+)/);
+  
+  let fixed = jsonString;
+  
+  if (positionMatch && lineMatch && columnMatch) {
+    const position = parseInt(positionMatch[1], 10);
+    const line = parseInt(lineMatch[1], 10);
+    const column = parseInt(columnMatch[1], 10);
+    
+    console.log(`🎯 错误位置: position ${position}, line ${line}, column ${column}`);
+    
+    // 按行分割JSON
+    const lines = jsonString.split('\n');
+    
+    if (line > 0 && line <= lines.length) {
+      const problemLine = lines[line - 1]; // 数组索引从0开始
+      console.log(`🎯 问题行内容: "${problemLine}"`);
+      
+      // 检查是否是缺少逗号的问题
+      if (errorMessage.includes("Expected ',' or '}'")) {
+        // 如果当前行以 } 结尾，而下一行以 { 开头，则需要添加逗号
+        if (problemLine.trim() === '}' && line < lines.length) {
+          const nextLine = lines[line]; // line已经是1-based，所以这里是正确的下一行
+          if (nextLine && nextLine.trim().startsWith('{')) {
+            console.log('🎯 检测到缺少逗号的模式，在第', line, '行添加逗号');
+            lines[line - 1] = problemLine.replace('}', '},');
+            fixed = lines.join('\n');
+            console.log('🎯 修复后该行内容:', lines[line - 1]);
+          }
+        }
+        
+        // 如果错误在行中间，可能是对象内缺少逗号
+        if (column > 1 && column < problemLine.length) {
+          const beforeChar = problemLine[column - 2];
+          const afterChar = problemLine[column - 1];
+          console.log(`🎯 错误位置字符: 前="${beforeChar}", 后="${afterChar}"`);
+          
+          // 如果前面是 } 后面是 "，说明两个对象之间缺少逗号
+          if (beforeChar === '}' && afterChar === '"') {
+            const newLine = problemLine.substring(0, column - 1) + ',' + problemLine.substring(column - 1);
+            lines[line - 1] = newLine;
+            fixed = lines.join('\n');
+            console.log('🎯 在行中间添加逗号，修复后:', newLine);
+          }
+        }
+      }
+    }
+  }
+  
+  console.log('🎯 精准修复完成');
+  return fixed;
+};
+
+/**
+ * 重新构建有效的JSON
+ * @param content AI返回的原始内容
+ * @returns 重新构建的有效JSON字符串
+ */
+const rebuildValidJson = (content: string): string => {
+  console.log('🚀 开始重新构建JSON...');
+  
+  // 查找所有的标题行
+  const titlePattern = /"title":\s*"([^"]*)"/g;
+  
+  const objects: any[] = [];
+  
+  // 找到所有标题
+  const titleMatches = [...content.matchAll(titlePattern)];
+  console.log('🚀 找到', titleMatches.length, '个标题');
+  
+  // 为每个标题构建完整的对象
+  titleMatches.forEach((titleMatch, index) => {
+    const title = titleMatch[1];
+    const titleStartPos = titleMatch.index || 0;
+    
+    // 在标题附近查找其他属性
+    const nearbyContent = content.substring(
+      Math.max(0, titleStartPos - 200), 
+      Math.min(content.length, titleStartPos + 200)
+    );
+    
+    console.log(`🚀 处理标题 ${index + 1}: "${title}"`);
+    console.log(`🚀 附近内容:`, nearbyContent);
+    
+    const obj: any = {
+      title: title,
+      order: index + 1,
+      type: 'section',
+      level: 2,
+      estimatedMinutes: 10
+    };
+    
+    // 尝试提取其他属性
+    const orderMatch = nearbyContent.match(/"order":\s*(\d+)/);
+    if (orderMatch) obj.order = parseInt(orderMatch[1], 10);
+    
+    const typeMatch = nearbyContent.match(/"type":\s*"([^"]*)"/);
+    if (typeMatch) obj.type = typeMatch[1];
+    
+    const levelMatch = nearbyContent.match(/"level":\s*(\d+)/);
+    if (levelMatch) obj.level = parseInt(levelMatch[1], 10);
+    
+    const chapterMatch = nearbyContent.match(/"chapterNumber":\s*(\d+)/);
+    if (chapterMatch) obj.chapterNumber = parseInt(chapterMatch[1], 10);
+    
+    const parentMatch = nearbyContent.match(/"parentChapter":\s*(\d+)/);
+    if (parentMatch) obj.parentChapter = parseInt(parentMatch[1], 10);
+    
+    const timeMatch = nearbyContent.match(/"estimatedMinutes":\s*(\d+)/);
+    if (timeMatch) obj.estimatedMinutes = parseInt(timeMatch[1], 10);
+    
+    objects.push(obj);
+    console.log(`🚀 构建对象:`, obj);
+  });
+  
+  // 构建有效的JSON结构
+  const result = {
+    outline: objects
+  };
+  
+  const rebuiltJson = JSON.stringify(result, null, 2);
+  console.log('🚀 重新构建完成，对象数量:', objects.length);
+  console.log('🚀 重新构建的JSON预览:', rebuiltJson.substring(0, 500) + '...');
+  
+  return rebuiltJson;
+};
+
+/**
+ * 从损坏的JSON中提取有效的对象
+ * @param content AI返回的原始内容
+ * @returns 提取到的有效对象数组
+ */
+const extractValidJsonObjects = (content: string): any[] => {
+  const objects: any[] = [];
+  console.log('🔧 开始提取有效的JSON对象...');
+  
+  // 简单策略：查找所有完整的 {...} 块
+  const objectRegex = /\{[^{}]*"title"[^{}]*\}/g;
+  const matches = content.match(objectRegex);
+  
+  if (matches) {
+    console.log('🔧 找到', matches.length, '个潜在的对象');
+    
+    matches.forEach((match, index) => {
+      try {
+        const obj = JSON.parse(match);
+        if (obj.title) {
+          objects.push(obj);
+          console.log(`🔧 成功提取对象 ${index + 1}:`, obj.title);
+        }
+      } catch (e) {
+        console.log(`🔧 对象 ${index + 1} 解析失败，尝试修复...`);
+        try {
+          const fixedMatch = fixCommonJsonErrors(match);
+          const obj = JSON.parse(fixedMatch);
+          if (obj.title) {
+            objects.push(obj);
+            console.log(`🔧 修复后成功提取对象 ${index + 1}:`, obj.title);
+          }
+        } catch (e2) {
+          console.log(`🔧 对象 ${index + 1} 修复后仍失败`);
+        }
+      }
+    });
+  }
+  
+  // 如果没有找到对象，尝试更宽松的匹配
+  if (objects.length === 0) {
+    console.log('🔧 尝试更宽松的对象提取...');
+    
+    // 尝试提取包含标题的行，手工构造对象
+    const titleMatches = content.match(/"title":\s*"([^"]*)"/g);
+    if (titleMatches) {
+      titleMatches.forEach((titleMatch, index) => {
+        const titleValue = titleMatch.match(/"title":\s*"([^"]*)"/)?.[1];
+        if (titleValue) {
+          objects.push({
+            title: titleValue,
+            order: index + 1,
+            type: titleValue.includes('章') ? 'chapter' : 'section',
+            level: titleValue.includes('章') ? 1 : 2,
+            estimatedMinutes: 10
+          });
+          console.log(`🔧 手工构造对象 ${index + 1}:`, titleValue);
+        }
+      });
+    }
+  }
+  
+  console.log('🔧 总共提取到', objects.length, '个有效对象');
+  return objects;
+};
+
+/**
+ * 直接从文本中解析大纲（不依赖JSON）
+ * @param content AI返回的原始内容
+ * @returns 解析出的大纲项目数组
+ */
+const parseOutlineFromText = (content: string): any[] => {
+  console.log('📝 开始直接文本解析...');
+  const items: any[] = [];
+  
+  // 将内容按行分割
+  const lines = content.split('\n');
+  let order = 1;
+  
+  // 查找章节和小节的模式
+  const chapterPattern = /第(\d+)章\s*(.+)/;
+  const sectionPattern = /(\d+)\.(\d+)\s*(.+)/;
+  const titlePattern = /"title":\s*"([^"]*)"/;
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    
+    // 跳过空行和明显的JSON语法
+    if (!trimmedLine || trimmedLine.includes('{') || trimmedLine.includes('}') || trimmedLine.includes('[') || trimmedLine.includes(']')) {
+      continue;
+    }
+    
+    // 尝试匹配章节
+    let chapterMatch = trimmedLine.match(chapterPattern);
+    if (chapterMatch) {
+      const chapterNumber = parseInt(chapterMatch[1], 10);
+      const chapterTitle = chapterMatch[2];
+      items.push({
+        title: `第${chapterNumber}章 ${chapterTitle}`,
+        order: order++,
+        type: 'chapter',
+        level: 1,
+        chapterNumber: chapterNumber
+      });
+      console.log('📝 找到章节:', `第${chapterNumber}章 ${chapterTitle}`);
+      continue;
+    }
+    
+    // 尝试匹配小节
+    let sectionMatch = trimmedLine.match(sectionPattern);
+    if (sectionMatch) {
+      const chapterNum = parseInt(sectionMatch[1], 10);
+      const sectionNum = parseInt(sectionMatch[2], 10);
+      const sectionTitle = sectionMatch[3];
+      items.push({
+        title: `${chapterNum}.${sectionNum} ${sectionTitle}`,
+        order: order++,
+        type: 'section',
+        level: 2,
+        parentChapter: chapterNum,
+        estimatedMinutes: 10
+      });
+      console.log('📝 找到小节:', `${chapterNum}.${sectionNum} ${sectionTitle}`);
+      continue;
+    }
+    
+    // 尝试从JSON片段中提取标题
+    let titleMatch = trimmedLine.match(titlePattern);
+    if (titleMatch) {
+      const title = titleMatch[1];
+      if (title && !title.includes('estimatedMinutes') && !title.includes('order')) {
+        const isChapter = title.includes('章');
+        items.push({
+          title: title,
+          order: order++,
+          type: isChapter ? 'chapter' : 'section',
+          level: isChapter ? 1 : 2,
+          estimatedMinutes: isChapter ? undefined : 10
+        });
+        console.log('📝 从JSON片段提取标题:', title);
+      }
+    }
+  }
+  
+  // 如果没有找到任何内容，尝试更宽松的匹配
+  if (items.length === 0) {
+    console.log('📝 未找到结构化内容，尝试宽松匹配...');
+    
+    // 查找任何包含"章"或数字开头的行
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (trimmedLine.length > 3 && (trimmedLine.includes('章') || /^\d+/.test(trimmedLine))) {
+        items.push({
+          title: trimmedLine,
+          order: order++,
+          type: trimmedLine.includes('章') ? 'chapter' : 'section',
+          level: trimmedLine.includes('章') ? 1 : 2,
+          estimatedMinutes: 10
+        });
+        console.log('📝 宽松匹配找到:', trimmedLine);
+      }
+    }
+  }
+  
+  console.log('📝 文本解析完成，总共找到', items.length, '个项目');
+  return items;
+};
+
+/**
+ * 严格重组大纲结构
+ * 完全重建章节-小节关系，忽略AI的错误parentChapter设置
+ * @param outlineItems 原始大纲项目数组
+ * @returns 重新组织后的大纲项目数组
+ * @deprecated 已被 fixOutlineStructure 替代，保留备用
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const strictlyReorganizeOutline = (outlineItems: any[]): any[] => {
+  console.log('🔧 开始严格重组大纲结构...');
+  
+  // 第1步：提取所有章节（按order排序）
+  const chapters = outlineItems
+    .filter(item => item.type === 'chapter')
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  
+  // 第2步：提取所有小节，并按标题中的编号分组
+  const sections = outlineItems.filter(item => item.type === 'section');
+  
+  console.log('📋 找到章节:', chapters.map(c => c.title));
+  console.log('📋 找到小节:', sections.map(s => s.title));
+  
+  // 第3步：为每个小节重新确定正确的父章节
+  const correctedSections = sections.map(section => {
+    const sectionNumber = extractChapterNumber(section.title);
+    console.log(`🔍 小节 "${section.title}" 提取的章节编号: ${sectionNumber}`);
+    
+    return {
+      ...section,
+      parentChapter: sectionNumber, // 强制使用从标题提取的编号
+      correctedParentChapter: sectionNumber
+    };
+  });
+  
+  // 第4步：重新构建大纲结构
+  const result: any[] = [];
+  let currentOrder = 1;
+  
+  chapters.forEach(chapter => {
+    const chapterNumber = chapter.chapterNumber || extractChapterNumber(chapter.title);
+    console.log(`\n📖 处理章节: "${chapter.title}" (编号: ${chapterNumber})`);
+    
+    // 添加章节
+    result.push({
+      ...chapter,
+      order: currentOrder++,
+      chapterNumber: chapterNumber
+    });
+    
+    // 找到属于此章节的小节
+    const chapterSections = correctedSections.filter(section => 
+      section.correctedParentChapter === chapterNumber
+    );
+    
+    console.log(`  找到 ${chapterSections.length} 个属于此章节的小节:`, 
+      chapterSections.map(s => s.title));
+    
+    // 添加小节
+    chapterSections
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .forEach(section => {
+        result.push({
+          ...section,
+          order: currentOrder++,
+          parentChapter: chapterNumber
+        });
+      });
+  });
+  
+  console.log('✅ 严格重组完成，新结构:');
+  result.forEach((item, index) => {
+    console.log(`${index}: ${item.type} - "${item.title}" (parentChapter: ${item.parentChapter})`);
+  });
+  
+  return result;
+};
+
+/**
+ * 确保每个章节都至少有一个小节
+ * @param outlineItems 原始大纲项目数组
+ * @returns 修复后的大纲项目数组
+ * @deprecated 已被 fixOutlineStructure 替代，保留备用
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const ensureChaptersHaveSections = (outlineItems: any[]): any[] => {
+  console.log('🔧 开始重新整理大纲结构...');
+  console.log('原始项目:', outlineItems.map(item => `${item.type}: ${item.title}`));
+  
+  // 第1步：分离章节和小节
+  const chapters = outlineItems.filter(item => item.type === 'chapter');
+  const sections = outlineItems.filter(item => item.type === 'section');
+  
+  console.log('章节:', chapters.map(c => c.title));
+  console.log('小节:', sections.map(s => s.title));
+  
+  // 第2步：重新构建正确的结构
+  const result: any[] = [];
+  let currentOrder = 1;
+  
+  chapters.forEach((chapter, chapterIndex) => {
+    const chapterNumber = chapter.chapterNumber || extractChapterNumber(chapter.title);
+    console.log(`\n处理章节: "${chapter.title}", 编号: ${chapterNumber}`);
+    
+    // 添加章节
+    const chapterItem = {
+      ...chapter,
+      order: currentOrder++,
+      chapterNumber: chapterNumber
+    };
+    result.push(chapterItem);
+    
+    // 查找属于此章节的小节
+    const belongingSections = sections.filter(section => {
+      const titleMatch = section.title.startsWith(`${chapterNumber}.`);
+      const parentMatch = section.parentChapter === chapterNumber;
+      const extracted = extractChapterNumber(section.title);
+      const extractedMatch = extracted === chapterNumber;
+      
+      console.log(`  检查小节 "${section.title}": titleMatch=${titleMatch}, parentMatch=${parentMatch}(${section.parentChapter}===${chapterNumber}), extractedMatch=${extractedMatch}(${extracted}===${chapterNumber})`);
+      
+      // 如果小节的标题编号与章节编号不匹配，但parentChapter匹配，说明有错位问题
+      if (parentMatch && !titleMatch && !extractedMatch) {
+        console.warn(`⚠️ 发现错位小节: "${section.title}" 声称属于第${section.parentChapter}章，但标题编号不匹配`);
+      }
+      
+      return titleMatch || parentMatch || extractedMatch;
+    });
+    
+    console.log(`  找到${belongingSections.length}个属于此章节的小节`);
+    
+    if (belongingSections.length > 0) {
+      // 添加找到的小节
+      belongingSections.forEach(section => {
+        const sectionItem = {
+          ...section,
+          order: currentOrder++,
+          parentChapter: chapterNumber,
+          level: 2
+        };
+        result.push(sectionItem);
+        console.log(`  添加小节: ${section.title}`);
+      });
+    } else {
+      // 创建默认小节
+      const defaultSection = {
+        id: `section-${chapterNumber}-1-${Date.now()}`, // 添加时间戳确保唯一性
+        title: `${chapterNumber}.1 本章要点`,
+        order: currentOrder++,
+        type: 'section',
+        level: 2,
+        parentChapter: chapterNumber,
+        estimatedMinutes: 15,
+        isCompleted: false
+      };
+      result.push(defaultSection);
+      console.log(`  ✅ 创建默认小节: ${defaultSection.title} (ID: ${defaultSection.id})`);
+    }
+  });
+  
+  console.log('\n✅ 大纲结构重整完成');
+  console.log('最终结构:', result.map(item => `${item.type}: ${item.title}`));
+  
+  return result;
+};
+
+/**
+ * 从章节标题中提取章节编号
+ * @param title 章节标题
+ * @returns 章节编号
+ */
+const extractChapterNumber = (title: string): number => {
+  console.log(`🔍 提取章节编号，输入标题: "${title}"`);
+  
+  // 匹配"第X章"、"Chapter X"、"X.Y"等格式 - 按优先级排序
+  const patterns = [
+    /第(\d+)章/,                    // 第X章 - 最高优先级
+    /第([一二三四五六七八九十])章/,    // 第一章、第二章等
+    /Chapter\s+(\d+)/i,            // Chapter X
+    /^(\d+)\.\d+/,                 // X.Y (小节格式) - 提取章节编号 - 最低优先级
+  ];
+  
+  for (const pattern of patterns) {
+    const match = title.match(pattern);
+    if (match) {
+      let num = match[1];
+      console.log(`✅ 匹配到模式: ${pattern.source}, 提取值: "${num}"`);
+      
+      // 处理中文数字
+      const chineseNumbers: { [key: string]: number } = {
+        '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+        '六': 6, '七': 7, '八': 8, '九': 9, '十': 10
+      };
+      
+      let result: number;
+      if (chineseNumbers[num]) {
+        result = chineseNumbers[num];
+      } else {
+        result = parseInt(num, 10);
+      }
+      
+      console.log(`🎯 最终提取结果: ${result}`);
+      return result;
+    }
+  }
+  
+  console.log(`⚠️ 未能提取章节编号，使用默认值1`);
+  return 1; // 默认返回1
+};
+
+/**
+ * 统一的大纲结构修复函数 - 强制重建版本
+ * 彻底重建章节小节关系，不依赖原有的错误数据
+ * @param outlineItems 原始大纲项目数组
+ * @returns 修复后的大纲项目数组
+ */
+const fixOutlineStructure = (outlineItems: any[]): any[] => {
+  console.log('🔧 开始强制重建大纲结构...');
+  console.log('原始项目:', outlineItems.map(item => `${item.type}: ${item.title}`));
+  
+  // 第1步：分离章节和小节，按order排序
+  const chapters = outlineItems
+    .filter(item => item.type === 'chapter')
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  
+  const sections = outlineItems
+    .filter(item => item.type === 'section')
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  
+  console.log('📋 分离结果 - 章节:', chapters.map(c => c.title));
+  console.log('📋 分离结果 - 小节:', sections.map(s => s.title));
+  
+  const result: any[] = [];
+  let currentOrder = 1;
+  
+  // 第2步：为每个章节强制重建小节
+  chapters.forEach((chapter, chapterIndex) => {
+    const chapterNumber = chapterIndex + 1; // 强制使用顺序编号，不依赖标题解析
+    console.log(`\n📖 处理章节 ${chapterIndex + 1}: "${chapter.title}" (强制编号: ${chapterNumber})`);
+    
+    // 修正章节标题编号（如果需要）
+    let correctedTitle = chapter.title;
+    const titleChapterMatch = correctedTitle.match(/^第(\d+)章/);
+    if (!titleChapterMatch || parseInt(titleChapterMatch[1]) !== chapterNumber) {
+      // 标题编号错误，需要修正
+      correctedTitle = correctedTitle.replace(/^第\d+章/, `第${chapterNumber}章`);
+      console.log(`  修正章节标题: "${chapter.title}" -> "${correctedTitle}"`);
+    }
+    
+    // 添加章节
+    const chapterItem = {
+      ...chapter,
+      title: correctedTitle,
+      order: currentOrder++,
+      chapterNumber: chapterNumber,
+      type: 'chapter',
+      level: 1
+    };
+    result.push(chapterItem);
+    
+    // 计算这个章节应该有多少个小节
+    const sectionCountPerChapter = Math.ceil(sections.length / chapters.length);
+    const startIndex = chapterIndex * sectionCountPerChapter;
+    const endIndex = Math.min((chapterIndex + 1) * sectionCountPerChapter, sections.length);
+    const chapterSections = sections.slice(startIndex, endIndex);
+    
+    console.log(`  分配给第${chapterNumber}章的小节: ${chapterSections.length}个 (索引 ${startIndex}-${endIndex-1})`);
+    
+    if (chapterSections.length > 0) {
+      // 重新编号小节
+      chapterSections.forEach((section, sectionIndex) => {
+        const sectionNumber = sectionIndex + 1;
+        
+        // 修正小节标题编号
+        let correctedSectionTitle = section.title;
+        const originalContent = section.title.replace(/^\d+\.\d+\s*/, ''); // 移除原有编号，保留内容
+        correctedSectionTitle = `${chapterNumber}.${sectionNumber} ${originalContent}`;
+        
+        const sectionItem = {
+          ...section,
+          title: correctedSectionTitle,
+          order: currentOrder++,
+          parentChapter: chapterNumber,
+          type: 'section',
+          level: 2,
+          estimatedMinutes: section.estimatedMinutes || 10
+        };
+        result.push(sectionItem);
+        console.log(`  ✅ 重建小节: "${section.title}" -> "${correctedSectionTitle}"`);
+      });
+    } else {
+      // 没有小节，创建默认小节
+      const defaultSection = {
+        id: `section-${chapterNumber}-1-${Date.now()}`,
+        title: `${chapterNumber}.1 本章要点`,
+        order: currentOrder++,
+        type: 'section',
+        level: 2,
+        parentChapter: chapterNumber,
+        estimatedMinutes: 15,
+        isCompleted: false
+      };
+      result.push(defaultSection);
+      console.log(`  🔄 自动创建小节: ${defaultSection.title}`);
+    }
+  });
+  
+  console.log('\n✅ 强制重建完成');
+  console.log('最终结构:', result.map(item => `${item.type}: ${item.title}`));
+  
+  return result;
+};
+
+/**
+ * 修复现有大纲数据，确保每个章节都有小节
+ * 这个函数可以用于修复现有的学习会话
+ */
+export const fixExistingOutline = (outlineItems: any[]): any[] => {
+  console.log('🔧 开始修复现有大纲数据...');
+  console.log('原始大纲项目数量:', outlineItems.length);
+  
+  const finalFixedItems = fixOutlineStructure(outlineItems);
+  
+  console.log('修复后大纲项目数量:', finalFixedItems.length);
+  console.log('✅ 大纲修复完成');
+  
+  return finalFixedItems;
+};
+
+/**
  * 生成学习大纲
  * 基于文档内容生成结构化的学习大纲
  */
+/**
+ * 检测文档的章节结构
+ * @param content 文档内容
+ * @returns 章节信息数组
+ */
+const detectChapterStructure = (content: string): Array<{title: string; startIndex: number; order: number}> => {
+  const chapters: Array<{title: string; startIndex: number; order: number}> = [];
+  
+  // 常见的章节标识模式 - 按优先级排序
+  const chapterPatterns = [
+    // 标准中文章节格式
+    /^第[一二三四五六七八九十\d]+章\s+[^\n]+/gm,
+    /^第[一二三四五六七八九十\d]+部分\s+[^\n]+/gm,
+    
+    // 英文章节格式
+    /^Chapter\s+\d+[:\s•\-—]+[^\n]+/gmi,
+    /^Chapter\s+[IVX]+[:\s•\-—]+[^\n]+/gmi,
+    
+    // 数字章节格式
+    /^\d+[\.、]\s+[^\n]{5,100}$/gm,
+    /^\d+\s+[^\n]{5,100}$/gm,
+    
+    // 中文序号格式
+    /^[一二三四五六七八九十]\s*[、．.]\s*[^\n]{5,100}$/gm,
+    
+    // 其他可能的章节格式
+    /^[^\n]*第\s*[一二三四五六七八九十\d]+\s*[章节部分]\s*[^\n]*$/gm,
+    /^.*?Chapter.*?\d+.*?$/gmi,
+  ];
+  
+  for (const pattern of chapterPatterns) {
+    const matches = Array.from(content.matchAll(pattern));
+    if (matches.length >= 3) { // 至少有3个章节才认为是有效结构
+      matches.forEach((match, index) => {
+        chapters.push({
+          title: match[0].trim(),
+          startIndex: match.index || 0,
+          order: index + 1
+        });
+      });
+      break; // 找到第一个有效的章节模式就停止
+    }
+  }
+  
+  return chapters;
+};
+
+/**
+ * 智能截取文档内容，确保AI处理不会超出token限制
+ * @param content 原始内容
+ * @param maxLength 最大长度
+ * @returns 截取后的内容摘要
+ */
+const smartContentTruncate = (content: string, maxLength: number = 8000): string => {
+  if (content.length <= maxLength) {
+    return content;
+  }
+  
+  // 超大文档特殊处理策略
+  if (content.length > 30000) {
+    console.log(`检测到超大文档(${content.length}字)，启用高级截取策略`);
+    
+    // 尝试检测章节结构
+    const chapters = detectChapterStructure(content);
+    
+    if (chapters.length > 0) {
+      console.log(`检测到${chapters.length}个章节，基于完整章节结构进行截取`);
+      console.log('章节列表:', chapters.map(c => c.title));
+      
+      // 新策略：优先保证所有章节标题都被包含，让AI看到完整的文档结构
+      let result = '';
+      
+      // 1. 前言/序言部分 (第一章之前的内容)
+      const preambleEnd = chapters[0].startIndex;
+      const preamble = content.substring(0, Math.min(preambleEnd, maxLength * 0.2));
+      result += preamble + '\n\n[基于完整章节结构的内容摘要]\n\n';
+      
+      // 2. 首先列出所有章节标题，让AI了解完整结构
+      result += '【完整章节结构】\n';
+      chapters.forEach((chapter) => {
+        result += `${chapter.title}\n`;
+      });
+      result += '\n';
+      
+      // 3. 为章节内容分配剩余空间
+      const usedLength = result.length;
+      const remainingLength = maxLength - usedLength - 500; // 保留500字符给结尾
+      
+      // 智能选择章节：前几章 + 中间章节 + 后几章
+      const selectedChapters = [];
+      if (chapters.length <= 8) {
+        // 如果章节不多，包含所有章节的部分内容
+        selectedChapters.push(...chapters);
+      } else {
+        // 如果章节很多，选择代表性章节
+        selectedChapters.push(chapters[0]); // 第一章
+        selectedChapters.push(chapters[1]); // 第二章
+        
+        // 中间几章
+        const middleStart = Math.floor(chapters.length * 0.3);
+        const middleEnd = Math.floor(chapters.length * 0.7);
+        for (let i = middleStart; i <= middleEnd && selectedChapters.length < 6; i++) {
+          selectedChapters.push(chapters[i]);
+        }
+        
+        // 最后几章
+        if (chapters.length > 2) {
+          selectedChapters.push(chapters[chapters.length - 2]); // 倒数第二章
+          selectedChapters.push(chapters[chapters.length - 1]); // 最后一章
+        }
+      }
+      
+      // 为每个选中的章节分配内容空间
+      const lengthPerChapter = Math.floor(remainingLength / selectedChapters.length);
+      
+      result += '\n【章节内容摘要】\n';
+      for (const chapter of selectedChapters) {
+        const nextChapterIndex = chapters.findIndex(c => c.order === chapter.order + 1);
+        const nextChapterStart = nextChapterIndex !== -1 ? chapters[nextChapterIndex].startIndex : content.length;
+        
+        // 提取章节内容的前面部分
+        const chapterContent = content.substring(
+          chapter.startIndex, 
+          Math.min(nextChapterStart, chapter.startIndex + lengthPerChapter)
+        );
+        
+        result += `\n【${chapter.title}】\n${chapterContent.substring(0, lengthPerChapter)}\n`;
+      }
+      
+      // 4. 文档结尾部分
+      const ending = content.substring(Math.max(0, content.length - 300));
+      result += '\n\n[文档结尾部分]\n' + ending;
+      
+      console.log(`章节结构截取完成: 包含${selectedChapters.length}个章节的详细内容，总长度${result.length}字符`);
+      return result;
+    }
+  }
+  
+  // 标准的三段式截取策略（原有逻辑）
+  const beginPortion = Math.floor(maxLength * 0.4); // 40%给开头
+  const middlePortion = Math.floor(maxLength * 0.3); // 30%给中间
+  const endPortion = Math.floor(maxLength * 0.3);   // 30%给结尾
+  
+  const beginning = content.substring(0, beginPortion);
+  
+  // 从中间位置开始截取
+  const middleStart = Math.floor(content.length / 2) - Math.floor(middlePortion / 2);
+  const middle = content.substring(middleStart, middleStart + middlePortion);
+  
+  // 从末尾开始截取
+  const ending = content.substring(content.length - endPortion);
+  
+  return `${beginning}\n\n[...文档中间部分...]\n\n${middle}\n\n[...文档后续部分...]\n\n${ending}`;
+};
+
 export const generateOutline = async (
   config: APIConfig,
   documentContent: string,
@@ -225,6 +1087,16 @@ export const generateOutline = async (
       instructions: documentStructureAnalysis.instructions
     });
 
+    // 智能截取内容，避免超出AI token限制
+    // 对于超大文档，给予更多的token空间
+    const maxLengthForOutline = documentContent.length > 30000 ? 12000 : 8000;
+    const truncatedContent = smartContentTruncate(documentContent, maxLengthForOutline);
+    const isContentTruncated = truncatedContent.length < documentContent.length;
+    
+    if (isContentTruncated) {
+      console.log(`内容过长已智能截取: ${documentContent.length} -> ${truncatedContent.length} 字符`);
+    }
+
     const prompt = `请基于以下文档内容，生成一个结构化的学习大纲，包含章节和小节的层级结构。
 
 ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文本内容' ? `
@@ -232,13 +1104,28 @@ ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文�
 要求：概括主要知识点或概念，使用专业术语，避免口语化，不要包含"学习"、"了解"等动词。
 
 然后，` : `文档标题：${documentTitle}
-`}文档字数：${wordCount} 字
+`}文档字数：${wordCount} 字${isContentTruncated ? ' (内容已智能截取用于大纲生成)' : ''}
 总预估学习时间：${totalEstimatedMinutes} 分钟
 推荐章节数：${documentStructureAnalysis.recommendedChapters}
 推荐每章小节数：${documentStructureAnalysis.recommendedSectionsPerChapter}
 
+${wordCount > 30000 ? `
+**长篇文档处理说明**：
+这是一份长篇文档(${wordCount}字)，已采用章节结构感知截取。内容包含：
+1. 【完整章节结构】- 文档的所有章节标题
+2. 【章节内容摘要】- 重点章节的详细内容
+3. 前言和结尾部分
+
+请严格按照提供的【完整章节结构】来规划学习大纲：
+- 保持与原文档章节的一致性和完整性
+- 为每个原始章节创建对应的学习章节
+- 可以在章节下细分为合理的小节
+- 确保覆盖文档的完整逻辑结构
+- 学习大纲应该体现原文档的思想脉络
+` : ''}
+
 文档内容：
-${documentContent}
+${truncatedContent}
 
 **智能章节规划要求**：
 ${documentStructureAnalysis.instructions}
@@ -249,8 +1136,24 @@ ${documentStructureAnalysis.instructions}
 3. 章节和小节标题要简洁明了，能准确概括该部分内容
 4. 应该有逻辑顺序，从基础到高级
 5. 只为小节估算学习时间（章节不需要时间，因为章节只是标题）
-6. **重要：返回格式必须是JSON对象，包含documentTitle（如果需要生成标题）和outline数组**
-7. **重要：小节编号必须与所属章节保持一致**，例如第1章下的小节必须是1.1、1.2、1.3，第2章下的小节必须是2.1、2.2、2.3
+6. **关键要求：每个章节必须至少包含一个小节**，即使原文档没有明确的子章节划分，也要创建如"X.1 本章概要"或"X.1 核心内容"等小节，确保用户可以点击跳转学习
+
+**⚠️ 极其重要：章节-小节关系规则（必须严格遵守）**：
+- 第1章下面ONLY能有1.1、1.2、1.3等小节，绝不能有2.X、3.X等
+- 第2章下面ONLY能有2.1、2.2、2.3等小节，绝不能有1.X、3.X等
+- 第3章下面ONLY能有3.1、3.2、3.3等小节，绝不能有1.X、2.X等
+- 小节编号的第一个数字必须等于其所属章节的编号
+- parentChapter字段必须与小节标题中的第一个数字完全一致
+- 例如："2.1 概述"的parentChapter必须是2，"3.2 实践"的parentChapter必须是3
+- 🚫 严禁出现：第2章下面有"1.1"或"3.1"这样错误编号的小节
+
+**JSON格式要求（非常重要）**：
+- 必须返回有效的JSON格式
+- 对象之间必须用逗号分隔
+- 最后一个对象后不要添加逗号
+- 确保所有引号正确匹配
+- 返回格式必须是JSON对象，包含documentTitle（如果需要生成标题）和outline数组
+- 小节编号必须与所属章节保持一致，例如第1章下的小节必须是1.1、1.2、1.3，第2章下的小节必须是2.1、2.2、2.3
 
 ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文本内容' ? `
 返回格式（需要生成标题）：
@@ -258,16 +1161,30 @@ ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文�
   "documentTitle": "生成的精确标题",
   "outline": [
     {"title": "第1章 基础概念介绍", "order": 1, "type": "chapter", "level": 1, "chapterNumber": 1},
-    {"title": "1.1 什么是解释", "order": 2, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 8},
-    {"title": "1.2 解释的重要性", "order": 3, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 7}
+    {"title": "1.1 核心概念", "order": 2, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 8},
+    {"title": "1.2 重要性分析", "order": 3, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 7},
+    {"title": "第2章 深入理解", "order": 4, "type": "chapter", "level": 1, "chapterNumber": 2},
+    {"title": "2.1 本章要点", "order": 5, "type": "section", "level": 2, "parentChapter": 2, "estimatedMinutes": 10},
+    {"title": "2.2 实践应用", "order": 6, "type": "section", "level": 2, "parentChapter": 2, "estimatedMinutes": 12},
+    {"title": "第3章 高级应用", "order": 7, "type": "chapter", "level": 1, "chapterNumber": 3},
+    {"title": "3.1 案例分析", "order": 8, "type": "section", "level": 2, "parentChapter": 3, "estimatedMinutes": 15}
   ]
-}` : `
+}
+
+❗️注意示例中的编号规律：
+- 第1章的小节：1.1, 1.2 (parentChapter都是1)
+- 第2章的小节：2.1, 2.2 (parentChapter都是2)  
+- 第3章的小节：3.1 (parentChapter是3)
+严格按照这个模式生成！` : `
 返回格式（已有标题）：
 {
   "outline": [
     {"title": "第1章 基础概念介绍", "order": 1, "type": "chapter", "level": 1, "chapterNumber": 1},
-    {"title": "1.1 什么是解释", "order": 2, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 8},
-    {"title": "1.2 解释的重要性", "order": 3, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 7}
+    {"title": "1.1 核心概念", "order": 2, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 8},
+    {"title": "1.2 重要性分析", "order": 3, "type": "section", "level": 2, "parentChapter": 1, "estimatedMinutes": 7},
+    {"title": "第2章 深入理解", "order": 4, "type": "chapter", "level": 1, "chapterNumber": 2},
+    {"title": "2.1 本章要点", "order": 5, "type": "section", "level": 2, "parentChapter": 2, "estimatedMinutes": 10},
+    {"title": "2.2 实践应用", "order": 6, "type": "section", "level": 2, "parentChapter": 2, "estimatedMinutes": 12}
   ]
 }`}`;
 
@@ -284,20 +1201,51 @@ ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文�
     let generatedTitle: string | undefined;
     
     try {
+      console.log('🔍 AI返回内容长度:', content.length);
+      console.log('🔍 AI返回内容预览:', content.substring(0, 800) + (content.length > 800 ? '...' : ''));
+      
       // 方法1: 查找完整的JSON对象
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       
       if (jsonMatch) {
-        console.log('方法1: 提取的JSON字符串:', jsonMatch[0]);
-        parsedResponse = JSON.parse(jsonMatch[0]);
-        console.log('方法1: 解析后的响应对象:', parsedResponse);
+        console.log('方法1: 提取的JSON字符串长度:', jsonMatch[0].length);
+        console.log('方法1: 提取的JSON字符串预览:', jsonMatch[0].substring(0, 500) + '...');
+        
+        try {
+          parsedResponse = JSON.parse(jsonMatch[0]);
+          console.log('方法1: 解析后的响应对象类型:', typeof parsedResponse);
+          console.log('方法1: 解析后的响应对象键:', Object.keys(parsedResponse));
+        } catch (jsonError) {
+          console.log('方法1失败，尝试精准修复JSON语法错误...');
+          console.log('JSON错误详情:', jsonError instanceof Error ? jsonError.message : String(jsonError));
+          
+          // 尝试基于错误信息精准修复
+          const fixedJson = fixJsonByErrorPosition(jsonMatch[0], jsonError instanceof Error ? jsonError.message : '');
+          
+          try {
+            parsedResponse = JSON.parse(fixedJson);
+            console.log('方法1: 精准修复成功，解析后的响应对象键:', Object.keys(parsedResponse));
+          } catch (secondError) {
+            console.log('精准修复失败，尝试通用修复...');
+            const generalFixedJson = fixCommonJsonErrors(jsonMatch[0]);
+            parsedResponse = JSON.parse(generalFixedJson);
+            console.log('方法1: 通用修复成功，解析后的响应对象键:', Object.keys(parsedResponse));
+          }
+        }
       } else {
         // 方法2: 查找代码块中的JSON
         const codeBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
         if (codeBlockMatch) {
           console.log('方法2: 从代码块提取JSON:', codeBlockMatch[1]);
-          parsedResponse = JSON.parse(codeBlockMatch[1]);
-          console.log('方法2: 解析后的响应对象:', parsedResponse);
+          try {
+            parsedResponse = JSON.parse(codeBlockMatch[1]);
+            console.log('方法2: 解析后的响应对象:', parsedResponse);
+          } catch (jsonError) {
+            console.log('方法2失败，尝试修复JSON语法错误...');
+            const fixedJson = fixCommonJsonErrors(codeBlockMatch[1]);
+            parsedResponse = JSON.parse(fixedJson);
+            console.log('方法2: JSON修复成功');
+          }
         } else {
           // 方法3: 尝试直接解析整个内容
           try {
@@ -305,23 +1253,64 @@ ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文�
             parsedResponse = JSON.parse(content.trim());
             console.log('方法3: 解析成功:', parsedResponse);
           } catch (e) {
-            // 方法4: 尝试解析旧格式（数组）
-            const arrayMatch = content.match(/\[[\s\S]*\]/);
-            if (arrayMatch) {
-              console.log('方法4: 兼容旧格式，提取数组:', arrayMatch[0]);
-              outlineItems = JSON.parse(arrayMatch[0]);
-              console.log('方法4: 解析后的大纲数组:', outlineItems);
-            } else {
-              console.error('方法4失败:', e);
-              console.error('无法找到有效的JSON格式大纲');
-              throw new Error('AI返回的内容格式不正确，无法解析JSON');
+            try {
+              console.log('方法3失败，尝试修复后解析整个内容...');
+              const fixedJson = fixCommonJsonErrors(content.trim());
+              parsedResponse = JSON.parse(fixedJson);
+              console.log('方法3: JSON修复成功');
+            } catch (e2) {
+              // 方法4: 尝试解析旧格式（数组）
+              const arrayMatch = content.match(/\[[\s\S]*\]/);
+              if (arrayMatch) {
+                console.log('方法4: 兼容旧格式，提取数组:', arrayMatch[0]);
+                try {
+                  outlineItems = JSON.parse(arrayMatch[0]);
+                  console.log('方法4: 解析后的大纲数组:', outlineItems);
+                } catch (e3) {
+                  console.log('方法4失败，尝试修复数组格式...');
+                  const fixedArrayJson = fixCommonJsonErrors(arrayMatch[0]);
+                  outlineItems = JSON.parse(fixedArrayJson);
+                  console.log('方法4: 数组JSON修复成功');
+                }
+              } else {
+                console.error('所有方法失败，尝试最后的备用方案...');
+                // 最后的备用方案1：重新构建有效的JSON
+                try {
+                  console.log('🚀 尝试重新构建JSON...');
+                  const rebuiltJson = rebuildValidJson(content);
+                  parsedResponse = JSON.parse(rebuiltJson);
+                  console.log('🚀 重新构建JSON成功');
+                } catch (e4) {
+                  // 最后的备用方案2：提取有效对象
+                  try {
+                    console.log('🔧 尝试提取有效的JSON对象...');
+                    const extractedObjects = extractValidJsonObjects(content);
+                    if (extractedObjects.length > 0) {
+                      console.log('🔧 备用方案成功：提取到', extractedObjects.length, '个有效对象');
+                      outlineItems = extractedObjects;
+                    } else {
+                      throw new Error('无法提取有效的JSON对象');
+                    }
+                  } catch (e5) {
+                    console.error('所有备用方案都失败，使用最后的文本解析方案:', e5);
+                    // 最终备用方案：直接文本解析，不依赖JSON
+                    try {
+                      outlineItems = parseOutlineFromText(content);
+                      console.log('📝 文本解析成功，提取到', outlineItems.length, '个大纲项目');
+                    } catch (e6) {
+                      console.error('文本解析也失败:', e6);
+                      throw new Error(`所有解析方法都失败了。请尝试重新上传文档或检查网络连接。`);
+                    }
+                  }
+                }
+              }
             }
           }
         }
       }
       
       // 处理新格式的响应
-      if (parsedResponse.outline) {
+      if (parsedResponse && parsedResponse.outline) {
         outlineItems = parsedResponse.outline;
         generatedTitle = parsedResponse.documentTitle;
         console.log('提取到大纲项目:', outlineItems.length, '个');
@@ -335,17 +1324,46 @@ ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文�
       }
       
     } catch (parseError) {
-      console.error('JSON解析失败:', parseError);
-      console.error('原始内容:', content);
-      throw new Error('AI返回的JSON格式有误，无法解析');
+      console.error('❌ JSON解析失败:', parseError);
+      console.error('❌ 原始内容长度:', content.length);
+      console.error('❌ 原始内容预览:', content.substring(0, 1000));
+      console.error('❌ 详细错误信息:', parseError instanceof Error ? parseError.message : String(parseError));
+      
+      // 尝试提供更有用的错误信息
+      let errorMessage = 'AI返回的JSON格式有误，无法解析';
+      
+      if (content.includes('```')) {
+        errorMessage += '。检测到代码块标记，可能是格式问题。';
+      }
+      
+      if (content.length === 0) {
+        errorMessage = 'AI未返回任何内容，请检查API配置和网络连接。';
+      } else if (content.length > 50000) {
+        errorMessage += '。返回内容过长，可能被截断。';
+      }
+      
+      if (content.includes('error') || content.includes('Error')) {
+        errorMessage += '。AI响应中包含错误信息。';
+      }
+      
+      throw new Error(errorMessage);
     }
     
     if (!Array.isArray(outlineItems)) {
       throw new Error('解析的大纲不是数组格式');
     }
 
+    console.log('🔍 AI生成的原始大纲数据:');
+    outlineItems.forEach((item, index) => {
+      console.log(`${index}: ${item.type} - "${item.title}" (parentChapter: ${item.parentChapter})`);
+    });
+
+    // 使用统一的大纲修复逻辑，避免重复处理
+    console.log('🔧 开始统一的大纲结构修复...');
+    const fixedOutlineItems = fixOutlineStructure(outlineItems);
+    
     // 处理大纲项目，添加必要的字段和时间预估
-    const processedItems = outlineItems.map((item, index) => {
+    const processedItems = fixedOutlineItems.map((item, index) => {
       const baseItem: any = {
         title: item.title || `项目 ${index + 1}`,
         order: item.order || index + 1,
@@ -356,8 +1374,8 @@ ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文�
 
       // 如果是小节，需要找到对应的父章节
       if (baseItem.type === 'section' && item.parentChapter) {
-        // 按章节编号匹配，而不是order
-        const parentChapter = outlineItems.find(parent => 
+        // 按章节编号匹配，而不是order，使用修复后的数据
+        const parentChapter = fixedOutlineItems.find(parent => 
           parent.type === 'chapter' && (parent.chapterNumber === item.parentChapter || parent.order === item.parentChapter)
         );
         if (parentChapter) {
@@ -687,18 +1705,28 @@ export const sendChatMessage = async (
   learningLevel: 'beginner' | 'expert'
 ): Promise<APIResponse<string>> => {
   try {
+    // 智能截取学习材料内容，避免token超限
+    const truncatedDocumentContent = smartContentTruncate(documentContent, 6000); // 对话中给更多空间给其他内容
+    const isContentTruncated = truncatedDocumentContent.length < documentContent.length;
+    
+    if (isContentTruncated) {
+      console.log(`对话系统: 学习材料过长已智能截取: ${documentContent.length} -> ${truncatedDocumentContent.length} 字符`);
+    }
+    
     // 构建系统消息
     const systemMessage = {
       role: 'system' as const,
       content: `${getSystemPrompt(learningLevel)}
 
-当前学习材料：
-${documentContent}
+当前学习材料${isContentTruncated ? '(已智能截取关键部分)' : ''}：
+${truncatedDocumentContent}
 
 学习大纲：
 ${outline.map((item, index) => `${index + 1}. ${item.title}`).join('\n')}
 
 用户学习水平：${learningLevel === 'beginner' ? '小白' : '高手'}
+
+${isContentTruncated ? '注意：学习材料内容较长，已进行智能截取。请基于提供的关键部分进行教学，必要时可以要求用户提供更具体的问题或章节。' : ''}
 
 请严格按照上述要求进行教学指导。`,
     };
@@ -714,9 +1742,24 @@ ${outline.map((item, index) => `${index + 1}. ${item.title}`).join('\n')}
 
     const response = await makeAPIRequest(config, apiMessages);
     
+    // 清理AI回复中的多余空白和格式问题
+    let cleanedContent = response.content || '';
+    
+    // 移除多余的空白字符和空行
+    cleanedContent = cleanedContent
+      .replace(/\s{3,}/g, ' ')           // 将3个以上的连续空格替换为1个空格
+      .replace(/\n\s*\n\s*\n/g, '\n\n') // 将3个以上的连续空行替换为2个空行
+      .replace(/^\s+/gm, '')            // 移除每行开头的空白
+      .replace(/\s+$/gm, '')            // 移除每行结尾的空白
+      .replace(/\n{4,}/g, '\n\n\n')     // 限制最多3个连续换行
+      .trim();                          // 移除开头和结尾的空白
+    
+    console.log('AI回复清理前长度:', response.content?.length || 0);
+    console.log('AI回复清理后长度:', cleanedContent.length);
+    
     return {
       success: true,
-      data: response.content || '',
+      data: cleanedContent,
     };
   } catch (error) {
     return {

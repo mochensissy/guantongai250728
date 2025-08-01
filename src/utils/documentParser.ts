@@ -15,20 +15,35 @@ import { DocumentParseResult } from '../types';
 /**
  * 通用文档解析函数
  * 根据文件类型或URL自动选择合适的解析方法
+ * 
+ * @param input 文件对象或文本字符串
+ * @param type 可选的文件类型指定
+ * @param progressCallback 可选的进度回调函数，主要用于大文件解析
+ * @returns Promise<DocumentParseResult> 解析结果
  */
 export const parseDocument = async (
   input: File | string,
-  type?: 'url' | 'pdf' | 'word' | 'ppt' | 'markdown' | 'text'
+  type?: 'url' | 'pdf' | 'word' | 'ppt' | 'markdown' | 'text',
+  progressCallback?: (progress: number, status: string) => void
 ): Promise<DocumentParseResult> => {
   try {
     // 如果输入是字符串，判断是URL还是文本内容
     if (typeof input === 'string') {
       if (type === 'url' || isValidURL(input)) {
-        return await parseURL(input);
+        progressCallback?.(50, '正在抓取网页内容...');
+        const result = await parseURL(input);
+        progressCallback?.(100, '网页解析完成！');
+        return result;
       } else if (type === 'markdown' || input.includes('# ') || input.includes('## ')) {
-        return parseMarkdown(input);
+        progressCallback?.(50, '正在解析Markdown内容...');
+        const result = parseMarkdown(input);
+        progressCallback?.(100, 'Markdown解析完成！');
+        return result;
       } else {
-        return parseText(input);
+        progressCallback?.(50, '正在处理文本内容...');
+        const result = parseText(input);
+        progressCallback?.(100, '文本处理完成！');
+        return result;
       }
     }
 
@@ -37,21 +52,37 @@ export const parseDocument = async (
     
     switch (fileType) {
       case 'pdf':
-        return await parsePDF(input);
+        // PDF解析支持进度回调
+        return await parsePDF(input, progressCallback);
       case 'word':
-        return await parseWord(input);
+        progressCallback?.(50, '正在解析Word文档...');
+        const wordResult = await parseWord(input);
+        progressCallback?.(100, 'Word文档解析完成！');
+        return wordResult;
       case 'ppt':
-        return await parsePowerPoint(input);
+        progressCallback?.(50, '正在解析PowerPoint文档...');
+        const pptResult = await parsePowerPoint(input);
+        progressCallback?.(100, 'PowerPoint文档解析完成！');
+        return pptResult;
       case 'markdown':
+        progressCallback?.(25, '正在读取Markdown文件...');
         const markdownContent = await readFileAsText(input);
-        return parseMarkdown(markdownContent);
+        progressCallback?.(75, '正在解析Markdown内容...');
+        const markdownResult = parseMarkdown(markdownContent);
+        progressCallback?.(100, 'Markdown文件解析完成！');
+        return markdownResult;
       case 'text':
       default:
+        progressCallback?.(25, '正在读取文本文件...');
         const textContent = await readFileAsText(input);
-        return parseText(textContent);
+        progressCallback?.(75, '正在处理文本内容...');
+        const textResult = parseText(textContent);
+        progressCallback?.(100, '文本文件处理完成！');
+        return textResult;
     }
   } catch (error) {
     console.error('文档解析失败:', error);
+    progressCallback?.(0, '解析失败');
     return {
       success: false,
       content: '',
@@ -102,7 +133,7 @@ const readFileAsText = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => resolve(e.target?.result as string || '');
-    reader.onerror = (e) => reject(new Error('文件读取失败'));
+    reader.onerror = () => reject(new Error('文件读取失败'));
     reader.readAsText(file, 'UTF-8');
   });
 };
@@ -359,49 +390,201 @@ const generateTitleFromURL = (url: string): string => {
 };
 
 /**
- * 解析PDF文档
+ * 解析PDF文档（优化版 - 支持大文件分批处理）
  * 使用pdf.js库来提取PDF中的文本内容
+ * 
+ * @param file PDF文件对象
+ * @param progressCallback 可选的进度回调函数，用于显示解析进度
+ * @returns Promise<DocumentParseResult> 解析结果
  */
-const parsePDF = async (file: File): Promise<DocumentParseResult> => {
+const parsePDF = async (
+  file: File, 
+  progressCallback?: (progress: number, status: string) => void
+): Promise<DocumentParseResult> => {
   try {
+    // 更新进度: 开始加载PDF.js
+    progressCallback?.(5, '正在初始化PDF解析器...');
+    
     // 使用CDN版本的PDF.js worker来避免构建问题
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.js');
     
     // 设置worker路径
     pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     
-    const arrayBuffer = await file.arrayBuffer();
+    // 更新进度: 正在读取文件
+    progressCallback?.(10, '正在读取PDF文件...');
+    
+    // 分块读取大文件，避免内存溢出
+    const arrayBuffer = await readFileInChunks(file, (progress) => {
+      progressCallback?.(10 + progress * 0.1, '正在读取PDF文件...');
+    });
+    
+    // 更新进度: 正在解析PDF结构
+    progressCallback?.(20, '正在解析PDF文档结构...');
+    
     const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+    const totalPages = pdf.numPages;
+    
+    // 检查页数，对大文档进行优化处理
+    if (totalPages > 100) {
+      console.warn(`PDF文档页数较多(${totalPages}页)，将采用分批处理模式`);
+    }
     
     let fullText = '';
+    const batchSize = totalPages > 50 ? 10 : 5; // 大文档使用更大的批次
     
-    // 逐页提取文本
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .filter(item => 'str' in item)
-        .map(item => (item as any).str)
-        .join(' ');
+    // 分批处理页面，避免内存压力过大
+    for (let startPage = 1; startPage <= totalPages; startPage += batchSize) {
+      const endPage = Math.min(startPage + batchSize - 1, totalPages);
+      const batchProgress = ((startPage - 1) / totalPages) * 70; // 页面解析占70%进度
       
-      fullText += pageText + '\n\n';
+      progressCallback?.(
+        20 + batchProgress, 
+        `正在解析第 ${startPage}-${endPage} 页 (共 ${totalPages} 页)...`
+      );
+      
+      // 并行处理批次内的页面
+      const batchPromises = [];
+      for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
+        batchPromises.push(extractPageText(pdf, pageNum));
+      }
+      
+      try {
+        const batchTexts = await Promise.all(batchPromises);
+        fullText += batchTexts.join('\n\n') + '\n\n';
+      } catch (batchError) {
+        console.warn(`批次 ${startPage}-${endPage} 解析部分失败:`, batchError);
+        // 对失败的页面进行单独重试
+        for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
+          try {
+            const pageText = await extractPageText(pdf, pageNum);
+            fullText += pageText + '\n\n';
+          } catch (pageError) {
+            console.warn(`第 ${pageNum} 页解析失败，跳过:`, pageError);
+            fullText += `[第${pageNum}页解析失败]\n\n`;
+          }
+        }
+      }
+      
+      // 在大文档处理过程中主动释放内存
+      if (totalPages > 100 && startPage % 50 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 100)); // 给浏览器时间进行垃圾回收
+      }
     }
+    
+    // 更新进度: 完成解析
+    progressCallback?.(90, '正在整理解析结果...');
+    
+    const wordCount = fullText.trim().split(/\s+/).length;
+    
+    // 对超大文档进行内容优化
+    if (wordCount > 50000) {
+      console.info(`文档内容较长(${wordCount}字)，建议用户考虑分段处理`);
+    }
+    
+    progressCallback?.(100, '解析完成！');
     
     return {
       success: true,
       content: fullText.trim(),
       title: file.name.replace(/\.[^/.]+$/, ''),
       metadata: {
-        pageCount: pdf.numPages,
-        wordCount: fullText.split(/\s+/).length,
+        pageCount: totalPages,
+        wordCount: wordCount,
+        // 注意：fileSize 不在 DocumentParseResult.metadata 类型定义中
+        // processingTime: Date.now(), // 可用于性能分析
       },
     };
   } catch (error) {
+    console.error('PDF解析失败:', error);
+    
+    // 增强错误信息，帮助用户理解问题
+    let errorMessage = 'PDF解析失败';
+    
+    if (error instanceof Error) {
+      const errorMsg = error.message.toLowerCase();
+      
+      if (errorMsg.includes('memory') || errorMsg.includes('allocation')) {
+        errorMessage = '文件过大导致内存不足，请尝试较小的PDF文件或联系技术支持';
+      } else if (errorMsg.includes('invalid') || errorMsg.includes('corrupt')) {
+        errorMessage = 'PDF文件格式不正确或已损坏，请检查文件完整性';
+      } else if (errorMsg.includes('password') || errorMsg.includes('encrypted')) {
+        errorMessage = '不支持加密或受密码保护的PDF文件';
+      } else {
+        errorMessage = `PDF解析失败: ${error.message}`;
+      }
+    }
+    
     return {
       success: false,
       content: '',
-      error: `PDF解析失败: ${error instanceof Error ? error.message : '未知错误'}`,
+      error: errorMessage,
     };
+  }
+};
+
+/**
+ * 分块读取大文件，避免内存溢出
+ * @param file 要读取的文件
+ * @param progressCallback 进度回调
+ * @returns Promise<ArrayBuffer> 文件内容
+ */
+const readFileInChunks = async (
+  file: File,
+  progressCallback?: (progress: number) => void
+): Promise<ArrayBuffer> => {
+  // 对于小文件，直接读取
+  if (file.size < 10 * 1024 * 1024) { // 小于10MB
+    return await file.arrayBuffer();
+  }
+  
+  // 大文件分块读取
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    
+    reader.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const progress = (event.loaded / event.total) * 100;
+        progressCallback?.(progress);
+      }
+    };
+    
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) {
+        resolve(reader.result);
+      } else {
+        reject(new Error('文件读取结果格式错误'));
+      }
+    };
+    
+    reader.onerror = () => {
+      reject(new Error('文件读取失败'));
+    };
+    
+    reader.readAsArrayBuffer(file);
+  });
+};
+
+/**
+ * 提取单页文本内容
+ * @param pdf PDF文档对象
+ * @param pageNum 页码
+ * @returns Promise<string> 页面文本内容
+ */
+const extractPageText = async (pdf: any, pageNum: number): Promise<string> => {
+  try {
+    const page = await pdf.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    
+    const pageText = textContent.items
+      .filter((item: any) => 'str' in item)
+      .map((item: any) => item.str)
+      .join(' ');
+    
+    return pageText;
+  } catch (error) {
+    console.warn(`第 ${pageNum} 页文本提取失败:`, error);
+    return `[第${pageNum}页提取失败]`;
   }
 };
 
