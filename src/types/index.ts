@@ -160,6 +160,34 @@ export interface DocumentParseResult {
     author?: string;
     createdDate?: string;
   };
+  /** 是否需要拆分（超过1.2万字） */
+  requiresSplit?: boolean;
+  /** 拆分后的文档片段 */
+  splitDocuments?: DocumentSplit[];
+}
+
+// 文档拆分片段
+export interface DocumentSplit {
+  /** 片段唯一标识符 */
+  id: string;
+  /** 片段标题 */
+  title: string;
+  /** 片段内容 */
+  content: string;
+  /** 片段序号（1、2、3...） */
+  index: number;
+  /** 字数统计 */
+  wordCount: number;
+  /** 原始文档标题 */
+  originalTitle: string;
+  /** 全文档的概览摘要（用于保持上下文） */
+  fullDocumentSummary?: string;
+  /** 前面章节的简要总结 */
+  previousChaptersSummary?: string;
+  /** 后续章节的预览 */
+  nextChaptersPreview?: string;
+  /** 章节间的关键连接点 */
+  crossReferences?: string[];
 }
 
 // AI生成大纲的响应

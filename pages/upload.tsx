@@ -39,7 +39,7 @@ const UploadPage: React.FC = () => {
   const router = useRouter();
 
   // 状态管理
-  const [currentStep, setCurrentStep] = useState<'upload' | 'outline' | 'level'>('upload');
+  const [currentStep, setCurrentStep] = useState<'upload' | 'uploaded' | 'outline' | 'level'>('upload');
   const [parseResult, setParseResult] = useState<DocumentParseResult | null>(null);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [learningLevel, setLearningLevel] = useState<'beginner' | 'expert'>('beginner');
@@ -69,9 +69,157 @@ const UploadPage: React.FC = () => {
   };
 
   /**
+   * 创建备用大纲
+   * 当AI大纲生成失败时，基于文档内容创建简单的学习大纲
+   */
+  const createFallbackOutline = (content: string, title: string) => {
+    console.log('📝 开始创建备用大纲...');
+    
+    const outline = [];
+    const contentLength = content.length;
+    
+    // 根据内容长度决定章节数量
+    let chapterCount = Math.min(5, Math.max(2, Math.ceil(contentLength / 3000)));
+    
+    // 尝试检测现有的章节结构
+    const chapterPatterns = [
+      /第[一二三四五六七八九十\d]+章[：:\s]*([^\n]{10,50})/g,
+      /Chapter\s+\d+[：:\s]*([^\n]{10,50})/gi,
+      /^\d+[\.、]\s*([^\n]{10,50})/gm,
+      /^[一二三四五六七八九十][、．]\s*([^\n]{10,50})/gm,
+    ];
+    
+    let detectedChapters = [];
+    for (const pattern of chapterPatterns) {
+      const matches = [...content.matchAll(pattern)];
+      if (matches.length >= 2 && matches.length <= 8) {
+        detectedChapters = matches.map((match, index) => ({
+          title: match[1].trim(),
+          index: index + 1
+        }));
+        chapterCount = matches.length;
+        break;
+      }
+    }
+    
+    console.log(`📝 检测到 ${detectedChapters.length} 个现有章节`);
+    
+    if (detectedChapters.length > 0) {
+      // 使用检测到的章节结构
+      detectedChapters.forEach((chapter, index) => {
+        outline.push({
+          id: `chapter-${index + 1}`,
+          title: chapter.title,
+          type: 'chapter',
+          level: 1,
+          order: outline.length + 1,
+          chapterNumber: index + 1,
+          estimatedMinutes: 15
+        });
+        
+        // 为每个章节添加2-3个小节
+        const sectionCount = Math.min(3, Math.max(2, Math.ceil(contentLength / (chapterCount * 1500))));
+        for (let j = 0; j < sectionCount; j++) {
+          outline.push({
+            id: `section-${index + 1}-${j + 1}`,
+            title: `${chapter.title} - 第${j + 1}部分`,
+            type: 'section',
+            level: 2,
+            order: outline.length + 1,
+            parentChapter: index + 1,
+            parentId: `chapter-${index + 1}`,
+            estimatedMinutes: 8
+          });
+        }
+      });
+    } else {
+      // 创建通用章节结构
+      console.log(`📝 创建 ${chapterCount} 个通用章节`);
+      
+      const chapterTitles = [
+        '基础概念与入门',
+        '核心原理深入理解',
+        '实践应用与案例',
+        '高级技巧与进阶',
+        '总结与展望'
+      ];
+      
+      for (let i = 0; i < chapterCount; i++) {
+        const chapterTitle = i < chapterTitles.length ? 
+          chapterTitles[i] : 
+          `第${i + 1}章 核心内容学习`;
+        
+        outline.push({
+          id: `chapter-${i + 1}`,
+          title: chapterTitle,
+          type: 'chapter',
+          level: 1,
+          order: outline.length + 1,
+          chapterNumber: i + 1,
+          estimatedMinutes: 15
+        });
+        
+        // 为每个章节添加小节
+        const sectionCount = 3;
+        for (let j = 0; j < sectionCount; j++) {
+          const sectionTitles = [
+            '基础知识点',
+            '详细解析',
+            '实践应用'
+          ];
+          
+          outline.push({
+            id: `section-${i + 1}-${j + 1}`,
+            title: `${j + 1}. ${sectionTitles[j]}`,
+            type: 'section',
+            level: 2,
+            order: outline.length + 1,
+            parentChapter: i + 1,
+            parentId: `chapter-${i + 1}`,
+            estimatedMinutes: 8
+          });
+        }
+      }
+    }
+    
+    console.log(`📝 备用大纲创建完成，共 ${outline.length} 项`);
+    return outline;
+  };
+
+  /**
+   * 获取用户友好的错误信息
+   */
+  const getUserFriendlyErrorMessage = (errorMessage: string): string => {
+    if (errorMessage.includes('JSON')) {
+      return 'AI返回格式异常，可能是网络不稳定导致';
+    }
+    if (errorMessage.includes('timeout') || errorMessage.includes('超时')) {
+      return '请求超时，请检查网络连接';
+    }
+    if (errorMessage.includes('API') || errorMessage.includes('401') || errorMessage.includes('403')) {
+      return 'API配置问题，请检查密钥是否正确';
+    }
+    if (errorMessage.includes('rate limit') || errorMessage.includes('限制')) {
+      return 'API调用次数限制，请稍后再试';
+    }
+    if (errorMessage.includes('insufficient') || errorMessage.includes('余额')) {
+      return 'API余额不足，请检查账户状态';
+    }
+    return errorMessage;
+  };
+
+  /**
    * 处理文档上传完成
    */
   const handleDocumentUploaded = async (result: DocumentParseResult) => {
+    console.log('🔍 handleDocumentUploaded 收到的文档结果:', {
+      title: result.title,
+      contentLength: result.content.length,
+      contentPreview: result.content.substring(0, 300) + '...',
+      requiresSplit: result.requiresSplit,
+      splitDocuments: result.splitDocuments?.length || 0
+    });
+    
     setParseResult(result);
     
     if (!apiConfig) {
@@ -84,11 +232,27 @@ const UploadPage: React.FC = () => {
     setIsGeneratingOutline(true);
     
     try {
+      console.log('📤 开始调用 generateOutline，参数:', {
+        title: result.title,
+        contentLength: result.content.length,
+        contentType: typeof result.content,
+        contentStart: result.content.substring(0, 100),
+        apiProvider: apiConfig.provider,
+        apiModel: apiConfig.model
+      });
+      
       const outlineResponse = await generateOutline(
         apiConfig,
         result.content,
         result.title
       );
+      
+      console.log('📥 generateOutline 返回结果:', {
+        success: outlineResponse.success,
+        outlineLength: outlineResponse.outline?.length || 0,
+        error: outlineResponse.error,
+        generatedTitle: outlineResponse.generatedTitle
+      });
 
       if (outlineResponse.success) {
         // 如果AI生成了新标题，更新result.title
@@ -130,9 +294,43 @@ const UploadPage: React.FC = () => {
       }
     } catch (error) {
       console.error('生成大纲失败:', error);
-      alert(`生成大纲失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
       setIsGeneratingOutline(false);
+      
+      // 尝试创建一个基础大纲作为备用方案
+      try {
+        console.log('🔧 大纲生成失败，尝试创建备用大纲...');
+        const fallbackOutline = createFallbackOutline(result.content, result.title || '文档');
+        
+        if (fallbackOutline.length > 0) {
+          console.log('✅ 备用大纲创建成功:', fallbackOutline);
+          setOutline(fallbackOutline);
+          setCurrentStep('outline');
+          
+          // 显示友好的提示信息
+          alert('AI大纲生成遇到问题，已为您创建基础学习大纲。您可以在下一步中自定义调整。');
+          return;
+        }
+      } catch (fallbackError) {
+        console.error('备用大纲创建也失败:', fallbackError);
+      }
+      
+      // 如果备用方案也失败，提供更友好的错误处理
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      const userFriendlyMessage = getUserFriendlyErrorMessage(errorMessage);
+      
+      alert(`生成大纲失败: ${userFriendlyMessage}\n\n您可以：\n1. 检查网络连接后重试\n2. 尝试上传较小的文档\n3. 检查API配置是否正确`);
+      
+      // 重置到文档已上传状态，允许用户重试
+      setCurrentStep('uploaded');
+    }
+  };
+
+  /**
+   * 重试生成大纲
+   */
+  const retryGenerateOutline = () => {
+    if (parseResult) {
+      handleDocumentUploaded(parseResult);
     }
   };
 
@@ -320,6 +518,87 @@ const UploadPage: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* 文档已上传，等待生成大纲或显示错误 */}
+        {currentStep === 'uploaded' && parseResult && (
+          <div className="space-y-8">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                文档解析完成
+              </h2>
+              <p className="text-gray-600 max-w-2xl mx-auto">
+                您的文档已成功上传并解析。请选择下一步操作。
+              </p>
+            </div>
+
+            {/* 文档信息 */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="flex items-start gap-4">
+                <FileText className="w-8 h-8 text-green-500 flex-shrink-0 mt-1" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-medium text-gray-900 mb-2">
+                    {parseResult.title || '未命名文档'}
+                  </h3>
+                  <div className="text-sm text-gray-500 space-y-1">
+                    {parseResult.metadata?.wordCount && (
+                      <p>字数：{parseResult.metadata.wordCount.toLocaleString()} 字</p>
+                    )}
+                    {parseResult.metadata?.pageCount && (
+                      <p>页数：{parseResult.metadata.pageCount} 页</p>
+                    )}
+                    <p className="text-green-600 font-medium">✅ 文档解析成功</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 操作选项 */}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-amber-600 text-sm">⚠️</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-amber-900 mb-2">
+                    大纲生成遇到问题
+                  </h3>
+                  <p className="text-amber-700 text-sm mb-4">
+                    AI大纲生成失败，这可能是由于网络问题、API配置问题或文档内容过于复杂导致的。
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button
+                      variant="primary"
+                      onClick={retryGenerateOutline}
+                      loading={isGeneratingOutline}
+                      icon={<div className="w-4 h-4">🔄</div>}
+                    >
+                      重试生成大纲
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        const fallbackOutline = createFallbackOutline(parseResult.content, parseResult.title || '文档');
+                        setOutline(fallbackOutline);
+                        setCurrentStep('outline');
+                      }}
+                    >
+                      使用基础大纲
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setCurrentStep('upload');
+                        setParseResult(null);
+                      }}
+                    >
+                      重新上传
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

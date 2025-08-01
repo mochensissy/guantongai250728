@@ -8,9 +8,10 @@
  * - PowerPoint演示文稿解析
  * - Markdown文档解析
  * - 纯文本文档处理
+ * - 大文档智能拆分处理
  */
 
-import { DocumentParseResult } from '../types';
+import { DocumentParseResult, DocumentSplit } from '../types';
 
 /**
  * 通用文档解析函数
@@ -484,17 +485,30 @@ const parsePDF = async (
     
     progressCallback?.(100, '解析完成！');
     
-    return {
+    const trimmedContent = fullText.trim();
+    const documentTitle = file.name.replace(/\.[^/.]+$/, '');
+    const requiresSplit = shouldSplitDocument(trimmedContent);
+    
+    const result: DocumentParseResult = {
       success: true,
-      content: fullText.trim(),
-      title: file.name.replace(/\.[^/.]+$/, ''),
+      content: trimmedContent,
+      title: documentTitle,
       metadata: {
         pageCount: totalPages,
         wordCount: wordCount,
         // 注意：fileSize 不在 DocumentParseResult.metadata 类型定义中
         // processingTime: Date.now(), // 可用于性能分析
       },
+      requiresSplit,
     };
+    
+    // 如果需要拆分，提前生成拆分结果
+    if (requiresSplit) {
+      result.splitDocuments = splitDocument(trimmedContent, documentTitle);
+      console.log(`PDF文档需要拆分: ${documentTitle} (${wordCount}字) -> ${result.splitDocuments.length}个片段`);
+    }
+    
+    return result;
   } catch (error) {
     console.error('PDF解析失败:', error);
     
@@ -845,14 +859,26 @@ const parseText = (content: string): DocumentParseResult => {
   // 生成智能标题
   const title = generateTitleFromText(trimmedContent);
   
-  return {
+  const wordCount = trimmedContent.length;
+  const requiresSplit = shouldSplitDocument(trimmedContent);
+  
+  const result: DocumentParseResult = {
     success: true,
     content: trimmedContent,
     title,
     metadata: {
       wordCount: trimmedContent.split(/\s+/).length,
     },
+    requiresSplit,
   };
+  
+  // 如果需要拆分，提前生成拆分结果
+  if (requiresSplit) {
+    result.splitDocuments = splitDocument(trimmedContent, title);
+    console.log(`文档需要拆分: ${title} (${wordCount}字) -> ${result.splitDocuments.length}个片段`);
+  }
+  
+  return result;
 };
 
 /**
@@ -876,4 +902,440 @@ export const validateParseResult = (result: DocumentParseResult): boolean => {
   }
   
   return true;
+};
+
+/**
+ * 检查文档是否需要拆分（超过12000字）
+ * @param content 文档内容
+ * @returns 是否需要拆分
+ */
+export const shouldSplitDocument = (content: string): boolean => {
+  const wordCount = content.trim().length;
+  return wordCount > 12000;
+};
+
+/**
+ * 生成唯一ID
+ * 使用时间戳+随机数确保唯一性
+ */
+const generateUniqueId = (): string => {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
+/**
+ * 智能拆分文档为多个片段
+ * 根据文档结构（章节、段落）进行智能拆分，确保每个片段内容完整且在12000字以内
+ * 
+ * @param content 原始文档内容
+ * @param title 原始文档标题
+ * @param maxWordsPerSplit 每个片段的最大字数（默认12000）
+ * @returns DocumentSplit[] 拆分后的文档片段数组
+ */
+export const splitDocument = (
+  content: string, 
+  title: string = '文档', 
+  maxWordsPerSplit: number = 12000
+): DocumentSplit[] => {
+  const trimmedContent = content.trim();
+  
+  // 如果内容不需要拆分，返回原文档
+  if (trimmedContent.length <= maxWordsPerSplit) {
+    return [{
+      id: generateUniqueId(),
+      title: `${title}`,
+      content: trimmedContent,
+      index: 1,
+      wordCount: trimmedContent.length,
+      originalTitle: title
+    }];
+  }
+
+  console.log(`开始智能拆分文档: ${title} (${trimmedContent.length}字)`);
+  
+  // 生成基础时间戳用于这次拆分
+  const baseTimestamp = Date.now();
+  
+  // 生成全文档概要
+  const fullDocumentSummary = generateDocumentSummary(trimmedContent, title);
+  
+  // 尝试按章节拆分
+  const chapterSplits = splitByChapters(trimmedContent, title, maxWordsPerSplit, baseTimestamp);
+  if (chapterSplits.length > 1) {
+    console.log(`按章节拆分成功，共${chapterSplits.length}个片段:`);
+    
+    // 为每个片段添加上下文信息
+    const enrichedSplits = enrichSplitsWithContext(chapterSplits, trimmedContent, fullDocumentSummary);
+    
+    enrichedSplits.forEach((split, index) => {
+      console.log(`  片段${index + 1}: ${split.title} (${split.wordCount}字) ID: ${split.id}`);
+    });
+    return enrichedSplits;
+  }
+  
+  // 如果没有明显章节结构，按段落拆分
+  const paragraphSplits = splitByParagraphs(trimmedContent, title, maxWordsPerSplit, baseTimestamp);
+  console.log(`按段落拆分成功，共${paragraphSplits.length}个片段:`);
+  
+  // 为段落拆分也添加上下文信息
+  const enrichedSplits = enrichSplitsWithContext(paragraphSplits, trimmedContent, fullDocumentSummary);
+  
+  enrichedSplits.forEach((split, index) => {
+    console.log(`  片段${index + 1}: ${split.title} (${split.wordCount}字) ID: ${split.id}`);
+  });
+  return enrichedSplits;
+};
+
+/**
+ * 按章节结构拆分文档
+ * 识别章节标题模式，按章节进行拆分
+ */
+const splitByChapters = (
+  content: string, 
+  title: string, 
+  maxWordsPerSplit: number,
+  baseTimestamp: number
+): DocumentSplit[] => {
+  // 章节标题识别模式
+  const chapterPatterns = [
+    /^第[一二三四五六七八九十\d]+章\s+[^\n]+/gm,      // 第X章 标题
+    /^第[一二三四五六七八九十\d]+部分\s+[^\n]+/gm,    // 第X部分 标题
+    /^Chapter\s+\d+[:\s]+[^\n]+/gmi,                // Chapter X: Title
+    /^\d+\.\s+[^\n]{8,80}$/gm,                      // 1. 标题形式
+    /^[一二三四五六七八九十]\s*[、\.]\s*[^\n]{8,80}$/gm, // 一、标题形式
+    /^#{1,3}\s+[^\n]{8,80}$/gm,                     // Markdown标题
+  ];
+
+  let chapters: Array<{title: string, startIndex: number, content?: string}> = [];
+  
+  // 尝试所有模式，找到最合适的章节划分
+  for (const pattern of chapterPatterns) {
+    const matches = [...content.matchAll(pattern)];
+    
+    if (matches.length >= 2) { // 至少需要2个章节才认为是有效的章节结构
+      chapters = matches.map(match => ({
+        title: match[0].trim(),
+        startIndex: match.index || 0
+      }));
+      break;
+    }
+  }
+
+  // 如果没有找到章节结构，返回空数组
+  if (chapters.length < 2) {
+    return [];
+  }
+
+  // 提取每个章节的内容
+  const splits: DocumentSplit[] = [];
+  
+  for (let i = 0; i < chapters.length; i++) {
+    const chapter = chapters[i];
+    const nextChapter = chapters[i + 1];
+    
+    // 确定章节内容范围
+    const startIndex = chapter.startIndex;
+    const endIndex = nextChapter ? nextChapter.startIndex : content.length;
+    const chapterContent = content.substring(startIndex, endIndex).trim();
+    
+    // 如果单个章节过长，需要进一步拆分
+    if (chapterContent.length > maxWordsPerSplit) {
+      const subSplits = splitLongChapter(chapterContent, chapter.title, title, maxWordsPerSplit, splits.length, baseTimestamp);
+      splits.push(...subSplits);
+    } else {
+      splits.push({
+        id: `${baseTimestamp}-${splits.length + 1}-${Math.random().toString(36).substr(2, 6)}`,
+        title: `${title}（${splits.length + 1}）- ${chapter.title}`,
+        content: chapterContent,
+        index: splits.length + 1,
+        wordCount: chapterContent.length,
+        originalTitle: title
+      });
+    }
+  }
+
+  return splits;
+};
+
+/**
+ * 拆分过长的章节
+ */
+const splitLongChapter = (
+  chapterContent: string,
+  chapterTitle: string,
+  originalTitle: string,
+  maxWordsPerSplit: number,
+  currentIndex: number,
+  baseTimestamp: number
+): DocumentSplit[] => {
+  const splits: DocumentSplit[] = [];
+  
+  // 按段落拆分章节
+  const paragraphs = chapterContent.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+  let currentSplit = '';
+  let splitIndex = currentIndex + 1;
+  
+  for (const paragraph of paragraphs) {
+    const testContent = currentSplit + (currentSplit ? '\n\n' : '') + paragraph;
+    
+    if (testContent.length > maxWordsPerSplit && currentSplit.length > 0) {
+      // 当前片段已经达到上限，保存并开始新片段
+      splits.push({
+        id: `${baseTimestamp}-${splitIndex}-${Math.random().toString(36).substr(2, 6)}`,
+        title: `${originalTitle}（${splitIndex}）- ${chapterTitle}${splits.length > 0 ? ` (续${splits.length + 1})` : ''}`,
+        content: currentSplit.trim(),
+        index: splitIndex,
+        wordCount: currentSplit.length,
+        originalTitle: originalTitle
+      });
+      
+      currentSplit = paragraph;
+      splitIndex++;
+    } else {
+      currentSplit = testContent;
+    }
+  }
+  
+  // 添加最后一个片段
+  if (currentSplit.trim().length > 0) {
+    splits.push({
+      id: `${baseTimestamp}-${splitIndex}-${Math.random().toString(36).substr(2, 6)}`,
+      title: `${originalTitle}（${splitIndex}）- ${chapterTitle}${splits.length > 0 ? ` (续${splits.length + 1})` : ''}`,
+      content: currentSplit.trim(),
+      index: splitIndex,
+      wordCount: currentSplit.length,
+      originalTitle: originalTitle
+    });
+  }
+  
+  return splits;
+};
+
+/**
+ * 按段落拆分文档
+ * 当没有明显章节结构时使用
+ */
+const splitByParagraphs = (
+  content: string, 
+  title: string, 
+  maxWordsPerSplit: number,
+  baseTimestamp: number
+): DocumentSplit[] => {
+  const splits: DocumentSplit[] = [];
+  
+  // 按段落分割（双换行符或多个换行符）
+  const paragraphs = content.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+  
+  let currentSplit = '';
+  let splitIndex = 1;
+  
+  for (const paragraph of paragraphs) {
+    const testContent = currentSplit + (currentSplit ? '\n\n' : '') + paragraph;
+    
+    if (testContent.length > maxWordsPerSplit && currentSplit.length > 0) {
+      // 当前片段已达上限，保存并开始新片段
+      splits.push({
+        id: `${baseTimestamp}-${splitIndex}-${Math.random().toString(36).substr(2, 6)}`,
+        title: `${title}（${splitIndex}）`,
+        content: currentSplit.trim(),
+        index: splitIndex,
+        wordCount: currentSplit.length,
+        originalTitle: title
+      });
+      
+      currentSplit = paragraph;
+      splitIndex++;
+    } else {
+      currentSplit = testContent;
+    }
+  }
+  
+  // 添加最后一个片段
+  if (currentSplit.trim().length > 0) {
+    splits.push({
+      id: `${baseTimestamp}-${splitIndex}-${Math.random().toString(36).substr(2, 6)}`,
+      title: `${title}（${splitIndex}）`,
+      content: currentSplit.trim(),
+      index: splitIndex,
+      wordCount: currentSplit.length,
+      originalTitle: title
+    });
+  }
+  
+  return splits;
+};
+
+/**
+ * 生成文档概要摘要
+ * 提取文档的核心主题、结构和关键概念
+ */
+const generateDocumentSummary = (content: string, title: string): string => {
+  // 提取前500字作为开头概要
+  const intro = content.substring(0, 500);
+  
+  // 尝试识别主要章节标题
+  const chapterPatterns = [
+    /第[一二三四五六七八九十\d]+章[：:\s]*([^\n]{10,50})/g,
+    /Chapter\s+\d+[：:\s]*([^\n]{10,50})/gi,
+    /^\d+[\.、]\s*([^\n]{8,80})/gm,
+    /^[一二三四五六七八九十][、．]\s*([^\n]{8,80})/gm,
+    /^#{1,3}\s+([^\n]{8,80})/gm,
+  ];
+
+  const chapterTitles: string[] = [];
+  
+  for (const pattern of chapterPatterns) {
+    const matches = [...content.matchAll(pattern)];
+    if (matches.length >= 2) {
+      matches.slice(0, 8).forEach(match => {
+        const title = match[1]?.trim();
+        if (title && title.length > 0) {
+          chapterTitles.push(title);
+        }
+      });
+      break;
+    }
+  }
+
+  let summary = `【${title}】全文概要:\n\n`;
+  
+  if (chapterTitles.length > 0) {
+    summary += `主要章节结构:\n`;
+    chapterTitles.forEach((chapterTitle, index) => {
+      summary += `${index + 1}. ${chapterTitle}\n`;
+    });
+    summary += `\n`;
+  }
+  
+  summary += `文档开头内容:\n${intro}...\n\n`;
+  summary += `总字数: ${content.length} 字\n`;
+  summary += `文档类型: ${detectDocumentType(content)}\n`;
+  
+  return summary;
+};
+
+/**
+ * 检测文档类型
+ */
+const detectDocumentType = (content: string): string => {
+  const lowerContent = content.toLowerCase();
+  
+  if (lowerContent.includes('class ') || lowerContent.includes('function ') || lowerContent.includes('import ')) {
+    return '技术文档/代码';
+  } else if (lowerContent.includes('第一章') || lowerContent.includes('chapter')) {
+    return '书籍/教材';
+  } else if (lowerContent.includes('摘要') || lowerContent.includes('abstract')) {
+    return '学术论文';
+  } else if (lowerContent.includes('目标') || lowerContent.includes('方案')) {
+    return '项目文档';
+  } else {
+    return '一般文档';
+  }
+};
+
+/**
+ * 为拆分片段添加上下文信息
+ * 包括全文概要、前后章节总结、交叉引用等
+ */
+const enrichSplitsWithContext = (
+  splits: DocumentSplit[], 
+  _fullContent: string, 
+  fullDocumentSummary: string
+): DocumentSplit[] => {
+  console.log(`📚 正在为 ${splits.length} 个片段添加上下文信息...`);
+  
+  return splits.map((split, index) => {
+    // 生成前面章节的总结
+    let previousChaptersSummary = '';
+    if (index > 0) {
+      const previousSplits = splits.slice(0, index);
+      previousChaptersSummary = `前面章节概要:\n`;
+      previousSplits.forEach((prevSplit, prevIndex) => {
+        const preview = prevSplit.content.substring(0, 200);
+        previousChaptersSummary += `${prevIndex + 1}. ${prevSplit.title}: ${preview}...\n`;
+      });
+    }
+    
+    // 生成后续章节的预览
+    let nextChaptersPreview = '';
+    if (index < splits.length - 1) {
+      const nextSplits = splits.slice(index + 1, Math.min(index + 4, splits.length)); // 最多显示后3章
+      nextChaptersPreview = `后续章节预览:\n`;
+      nextSplits.forEach((nextSplit, nextIndex) => {
+        const preview = nextSplit.content.substring(0, 150);
+        nextChaptersPreview += `${index + nextIndex + 2}. ${nextSplit.title}: ${preview}...\n`;
+      });
+    }
+    
+    // 查找交叉引用
+    const crossReferences = findCrossReferences(split.content, splits, index);
+    
+    // 创建增强的内容，包含上下文信息
+    let enhancedContent = split.content;
+    
+    // 暂时禁用上下文增强，直接使用原始内容
+    // TODO: 后续优化上下文增强策略
+    enhancedContent = split.content;
+    
+    console.log(`  ✅ 片段 ${index + 1} 上下文增强完成 (原${split.wordCount}字 → 增强后${enhancedContent.length}字)`);
+    console.log(`  🔍 片段 ${index + 1} 内容检查:`, {
+      hasSpecialChars: /[\u0000-\u001F\u007F-\u009F]/.test(enhancedContent),
+      hasQuotes: enhancedContent.includes('"'),
+      hasBackslashes: enhancedContent.includes('\\'),
+      contentPreview: enhancedContent.substring(0, 200) + '...'
+    });
+    
+    return {
+      ...split,
+      content: enhancedContent,
+      wordCount: enhancedContent.length,
+      fullDocumentSummary,
+      previousChaptersSummary: previousChaptersSummary || undefined,
+      nextChaptersPreview: nextChaptersPreview || undefined,
+      crossReferences
+    };
+  });
+};
+
+/**
+ * 查找章节间的交叉引用
+ */
+const findCrossReferences = (currentContent: string, _allSplits: DocumentSplit[], _currentIndex: number): string[] => {
+  const references: string[] = [];
+  
+  // 查找对其他章节的引用模式
+  const referencePatterns = [
+    /第[一二三四五六七八九十\d]+章/g,
+    /前面提到的?([^\n，。]{10,30})/g,
+    /如前所述([^\n，。]{0,20})/g,
+    /上一章([^\n，。]{0,20})/g,
+    /下一章将([^\n，。]{0,30})/g,
+  ];
+  
+  for (const pattern of referencePatterns) {
+    const matches = [...currentContent.matchAll(pattern)];
+    matches.slice(0, 3).forEach(match => { // 最多3个引用
+      references.push(`- ${match[0]}`);
+    });
+  }
+  
+  return references;
+};
+
+/**
+ * 清理内容中可能导致JSON解析问题的特殊字符
+ * 注意：这里不对内容进行JSON转义，只是清理可能有问题的字符
+ */
+const cleanContentForJSON = (content: string): string => {
+  return content
+    // 移除控制字符，但保留常用的空白字符
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '')
+    // 移除可能的BOM标记
+    .replace(/^\uFEFF/, '')
+    // 规范化换行符
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    // 移除连续的多个空行，最多保留两个换行
+    .replace(/\n{3,}/g, '\n\n')
+    // 确保内容以合法字符结尾
+    .trim();
 };

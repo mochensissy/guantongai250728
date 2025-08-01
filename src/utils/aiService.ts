@@ -230,22 +230,33 @@ const fixCommonJsonErrors = (jsonString: string): string => {
   // 3. 修复多余的逗号（JSON末尾的逗号）
   fixed = fixed.replace(/,(\s*[}\]])/g, '$1');
   
-  // 4. 特殊情况：检查错误位置附近的内容
-  if (jsonString.length > 4800) {
-    const errorArea = jsonString.substring(4800, 4900);
+  // 4. 特殊情况：针对特定错误位置的修复
+  if (jsonString.length > 4700) {
+    // 检查位置4714附近的内容（从错误信息得知）
+    const startPos = Math.max(0, 4700);
+    const endPos = Math.min(jsonString.length, 4800);
+    const errorArea = jsonString.substring(startPos, endPos);
     console.log('🔧 错误位置附近内容:', errorArea);
     
-    // 查找错误位置附近的模式
-    const problemPatterns = [
-      /}\s*\n\s*"/g,  // } 后面直接跟属性（应该是新对象）
-      /}\s*\n\s*[a-zA-Z]/g,  // } 后面直接跟字母（缺少引号）
-    ];
+    // 在错误位置附近查找并修复常见问题
+    const beforeError = jsonString.substring(0, startPos);
+    const afterError = jsonString.substring(endPos);
     
-    problemPatterns.forEach((pattern, index) => {
-      if (pattern.test(errorArea)) {
-        console.log(`🔧 检测到问题模式 ${index + 1}`);
-      }
-    });
+    // 检查是否是对象间缺少逗号的问题
+    let fixedErrorArea = errorArea;
+    
+    // 修复 } 后面直接跟 { 的情况
+    fixedErrorArea = fixedErrorArea.replace(/}\s*\n\s*{/g, '},\n{');
+    
+    // 修复 } 后面直接跟 " 的情况（属性定义，说明是新对象开始）
+    fixedErrorArea = fixedErrorArea.replace(/}\s*\n\s*"/g, '},\n"');
+    
+    // 重新组合JSON
+    if (fixedErrorArea !== errorArea) {
+      fixed = beforeError + fixedErrorArea + afterError;
+      fixCount++;
+      console.log('🔧 修复了错误位置附近的语法问题');
+    }
   }
   
   // 5. 针对特定错误位置的修复
@@ -289,14 +300,41 @@ const fixJsonByErrorPosition = (jsonString: string, errorMessage: string): strin
   
   let fixed = jsonString;
   
-  if (positionMatch && lineMatch && columnMatch) {
+  if (positionMatch) {
     const position = parseInt(positionMatch[1], 10);
+    console.log(`🎯 错误位置: position ${position}`);
+    
+    // 检查错误位置附近的字符
+    const start = Math.max(0, position - 50);
+    const end = Math.min(jsonString.length, position + 50);
+    const context = jsonString.substring(start, end);
+    console.log(`🎯 错误位置附近的内容:`, context);
+    
+    // 找到错误位置的字符
+    const errorChar = jsonString.charAt(position);
+    console.log(`🎯 错误位置的字符: "${errorChar}" (ASCII: ${errorChar.charCodeAt(0)})`);
+    
+    // 如果错误位置是 { 并且前面是 }，说明缺少逗号
+    if (errorChar === '{' && position > 0) {
+      const beforeContext = jsonString.substring(Math.max(0, position - 20), position);
+      if (beforeContext.includes('}')) {
+        console.log('🎯 检测到对象间缺少逗号的问题');
+        // 在 } 和 { 之间插入逗号
+        fixed = jsonString.substring(0, position - beforeContext.length + beforeContext.lastIndexOf('}') + 1) + 
+                ',' + 
+                jsonString.substring(position - beforeContext.length + beforeContext.lastIndexOf('}') + 1);
+        console.log('🎯 在对象间插入了逗号');
+        return fixed;
+      }
+    }
+  }
+  
+  // 如果有行号和列号信息，进行更精确的修复
+  if (lineMatch && columnMatch) {
     const line = parseInt(lineMatch[1], 10);
     const column = parseInt(columnMatch[1], 10);
     
-    console.log(`🎯 错误位置: position ${position}, line ${line}, column ${column}`);
-    
-    // 按行分割JSON
+    // 按行分割JSON进行进一步处理
     const lines = jsonString.split('\n');
     
     if (line > 0 && line <= lines.length) {
@@ -304,7 +342,7 @@ const fixJsonByErrorPosition = (jsonString: string, errorMessage: string): strin
       console.log(`🎯 问题行内容: "${problemLine}"`);
       
       // 检查是否是缺少逗号的问题
-      if (errorMessage.includes("Expected ',' or '}'")) {
+      if (errorMessage.includes("Expected ',' or '}'") || errorMessage.includes("Expected ',' or ']'")) {
         // 如果当前行以 } 结尾，而下一行以 { 开头，则需要添加逗号
         if (problemLine.trim() === '}' && line < lines.length) {
           const nextLine = lines[line]; // line已经是1-based，所以这里是正确的下一行
@@ -1072,6 +1110,14 @@ export const generateOutline = async (
   documentContent: string,
   documentTitle?: string
 ): Promise<GenerateOutlineResponse> => {
+  console.log('🎯 generateOutline 开始处理:', {
+    title: documentTitle,
+    contentLength: documentContent.length,
+    contentPreview: documentContent.substring(0, 300) + '...',
+    provider: config.provider,
+    model: config.model
+  });
+  
   try {
     // 计算文档字数用于时间预估
     const wordCount = documentContent.length;
@@ -1329,6 +1375,12 @@ ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文�
       console.error('❌ 原始内容预览:', content.substring(0, 1000));
       console.error('❌ 详细错误信息:', parseError instanceof Error ? parseError.message : String(parseError));
       
+      // 针对拆分文档的简化诊断
+      const isSplitDocument = documentTitle?.includes('(') || documentContent.length > 10000;
+      if (isSplitDocument) {
+        console.error('🔍 检测到这可能是拆分文档片段');
+      }
+      
       // 尝试提供更有用的错误信息
       let errorMessage = 'AI返回的JSON格式有误，无法解析';
       
@@ -1344,6 +1396,10 @@ ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文�
       
       if (content.includes('error') || content.includes('Error')) {
         errorMessage += '。AI响应中包含错误信息。';
+      }
+      
+      if (isSplitDocument) {
+        errorMessage += '。检测到这是拆分文档片段，可能是内容复杂导致的解析问题。';
       }
       
       throw new Error(errorMessage);

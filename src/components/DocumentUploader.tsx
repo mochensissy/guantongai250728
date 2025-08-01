@@ -14,7 +14,9 @@ import { Upload, Link, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 import Button from './ui/Button';
 import Input from './ui/Input';
 import { parseDocument, validateParseResult } from '../utils/documentParser';
-import { DocumentParseResult, APIConfig } from '../types';
+import { DocumentParseResult, APIConfig, DocumentSplit } from '../types';
+import DocumentSplitConfirmModal from './DocumentSplitConfirmModal';
+import SplitDocumentSelector from './SplitDocumentSelector';
 
 interface DocumentUploaderProps {
   /** 文档上传完成回调 */
@@ -46,6 +48,11 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     type: 'info',
     progress: 0,
   });
+
+  // 文档拆分相关状态
+  const [showSplitConfirm, setShowSplitConfirm] = useState(false);
+  const [showSplitSelector, setShowSplitSelector] = useState(false);
+  const [currentParseResult, setCurrentParseResult] = useState<DocumentParseResult | null>(null);
 
   // 文件输入引用
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -125,7 +132,14 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
       
       if (validateParseResult(result)) {
         updateProcessingStatus(false, '文件解析成功！', 'success', 100);
-        onUploadComplete(result);
+        
+        // 检查是否需要拆分
+        if (result.requiresSplit && result.splitDocuments && result.splitDocuments.length > 1) {
+          setCurrentParseResult(result);
+          setShowSplitConfirm(true);
+        } else {
+          onUploadComplete(result);
+        }
       } else {
         updateProcessingStatus(false, '文件解析失败，请检查文件格式', 'error', 0);
       }
@@ -208,7 +222,14 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
       // 注意：标题生成现在集成在大纲生成阶段进行，这里不再单独调用AI
       
       updateProcessingStatus(false, '文本解析成功！', 'success');
-      onUploadComplete(result);
+      
+      // 检查是否需要拆分
+      if (result.requiresSplit && result.splitDocuments && result.splitDocuments.length > 1) {
+        setCurrentParseResult(result);
+        setShowSplitConfirm(true);
+      } else {
+        onUploadComplete(result);
+      }
       
     } catch (error) {
       updateProcessingStatus(
@@ -252,7 +273,90 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     fileInputRef.current?.click();
   };
 
+  /**
+   * 处理确认拆分文档
+   */
+  const handleConfirmSplit = () => {
+    if (currentParseResult?.splitDocuments) {
+      setShowSplitConfirm(false);
+      setShowSplitSelector(true);
+    }
+  };
+
+  /**
+   * 处理取消拆分，继续整篇学习
+   */
+  const handleCancelSplit = () => {
+    if (currentParseResult) {
+      setShowSplitConfirm(false);
+      onUploadComplete(currentParseResult);
+      setCurrentParseResult(null);
+    }
+  };
+
+  /**
+   * 处理选择拆分文档片段
+   */
+  const handleSelectSplitDocument = (selectedSplit: DocumentSplit) => {
+    console.log(`📥 DocumentUploader 收到选中的文档片段:`, {
+      id: selectedSplit.id,
+      title: selectedSplit.title,
+      contentLength: selectedSplit.content.length,
+      wordCount: selectedSplit.wordCount
+    });
+    
+    // 创建一个新的解析结果，包含选中的片段内容
+    const splitResult: DocumentParseResult = {
+      success: true,
+      content: selectedSplit.content,
+      title: selectedSplit.title,
+      metadata: {
+        wordCount: selectedSplit.wordCount,
+      },
+      requiresSplit: false, // 拆分后的文档不再需要拆分
+    };
+
+    console.log(`🔄 准备传递拆分结果给上级组件:`, {
+      title: splitResult.title,
+      contentLength: splitResult.content.length,
+      wordCount: splitResult.metadata?.wordCount
+    });
+
+    setShowSplitSelector(false);
+    setCurrentParseResult(null);
+    
+    console.log(`📤 调用 onUploadComplete 传递拆分后的文档`);
+    onUploadComplete(splitResult);
+  };
+
+  /**
+   * 处理返回重新选择
+   */
+  const handleGoBackToSelection = () => {
+    // 重置所有状态，回到初始上传界面
+    setShowSplitSelector(false);
+    setShowSplitConfirm(false);
+    setCurrentParseResult(null);
+    setProcessingStatus({
+      isProcessing: false,
+      message: '',
+      type: 'info',
+      progress: 0,
+    });
+  };
+
   const isProcessing = processingStatus.isProcessing || loading;
+
+  // 如果正在显示拆分选择器，渲染拆分选择器界面
+  if (showSplitSelector && currentParseResult?.splitDocuments) {
+    return (
+      <SplitDocumentSelector
+        splitDocuments={currentParseResult.splitDocuments}
+        onSelectDocument={handleSelectSplitDocument}
+        onGoBack={handleGoBackToSelection}
+      />
+    );
+  }
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -498,6 +602,19 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* 文档拆分确认对话框 */}
+      {showSplitConfirm && currentParseResult && currentParseResult.splitDocuments && (
+        <DocumentSplitConfirmModal
+          isOpen={showSplitConfirm}
+          originalTitle={currentParseResult.title || '文档'}
+          originalWordCount={currentParseResult.content.length}
+          splitDocuments={currentParseResult.splitDocuments}
+          onConfirm={handleConfirmSplit}
+          onCancel={handleCancelSplit}
+          onClose={handleCancelSplit}
+        />
       )}
     </div>
   );
