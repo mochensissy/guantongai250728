@@ -53,18 +53,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // 主题相关
-  const { currentTheme } = useTheme();
+  // 主题相关 - 保持useTheme hook以确保主题上下文正常工作
+  useTheme();
 
   /**
    * 根据消息内容长度获取合适的最大宽度
+   * 优化短消息显示，避免过多空白
    */
   const getMessageMaxWidth = (content: string): string => {
     const length = content.length;
-    if (length <= 20) return 'max-w-[35%]';      // 短消息
-    if (length <= 50) return 'max-w-[50%]';      // 中等消息
-    if (length <= 100) return 'max-w-[65%]';     // 较长消息
-    return 'max-w-[80%]';                        // 长消息
+    
+    // 对于非常短的消息，使用固定宽度而不是百分比，避免空白过多
+    if (length <= 10) return 'min-w-[120px] max-w-[200px]';  // 极短消息：固定合理宽度
+    if (length <= 20) return 'min-w-[150px] max-w-[300px]';  // 短消息：适中固定宽度 
+    if (length <= 50) return 'max-w-[50%]';                  // 中等消息：使用百分比
+    if (length <= 100) return 'max-w-[65%]';                 // 较长消息
+    return 'max-w-[80%]';                                    // 长消息
   };
 
   /**
@@ -72,21 +76,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
    */
   const getMessageContainerStyle = (isUser: boolean, content: string) => {
     const maxWidth = getMessageMaxWidth(content);
-    const baseStyle = `${maxWidth} px-4 py-3 shadow-sm transition-all duration-200 break-words overflow-hidden`;
+    // 优化样式：确保内容能够自适应，减少不必要的空白
+    const baseStyle = `${maxWidth} px-4 py-3 shadow-sm transition-all duration-200 break-words overflow-hidden inline-block`;
     
     if (learningLevel === 'beginner') {
       // 小白模式：圆润友好的设计
       if (isUser) {
-        return `${baseStyle} bg-[var(--color-primary-600)] text-white rounded-t-2xl rounded-bl-2xl rounded-br-lg ml-auto`;
+        return `${baseStyle} bg-[var(--color-primary-600)] text-white rounded-t-2xl rounded-bl-2xl rounded-br-lg`;
       } else {
-        return `${baseStyle} bg-[var(--surface-primary)] border border-[var(--border-secondary)] rounded-t-2xl rounded-br-2xl rounded-bl-lg mr-auto`;
+        return `${baseStyle} bg-[var(--surface-primary)] border border-[var(--border-secondary)] rounded-t-2xl rounded-br-2xl rounded-bl-lg`;
       }
     } else {
       // 高手模式：专业锐利的设计
       if (isUser) {
-        return `${baseStyle} bg-[var(--color-primary-600)] text-white rounded-lg ml-auto`;
+        return `${baseStyle} bg-[var(--color-primary-600)] text-white rounded-lg`;
       } else {
-        return `${baseStyle} bg-[var(--surface-primary)] border border-[var(--border-secondary)] rounded-lg mr-auto`;
+        return `${baseStyle} bg-[var(--surface-primary)] border border-[var(--border-secondary)] rounded-lg`;
       }
     }
   };
@@ -403,7 +408,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         )}
 
-        <div className={`flex-1 min-w-0 ${isUser ? 'text-right' : ''} ${isSystem ? 'text-center' : ''}`}>
+        <div className={`flex-1 min-w-0 ${isUser ? 'flex justify-end' : 'flex justify-start'} ${isSystem ? 'text-center' : ''} ${isAssistant ? 'pr-16' : ''}`}>
           <div className={
             isSystem 
               ? 'inline-block bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-lg px-3 py-2 text-sm'
@@ -437,28 +442,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
             {/* AI消息的收藏按钮 */}
             {isAssistant && !message.isBookmarked && (
-              <div className="absolute -right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
+              <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
                 <button
                   onClick={() => handleInspirationClick(message.id)}
-                  className="w-6 h-6 bg-yellow-500 hover:bg-yellow-600 text-white rounded-full flex items-center justify-center shadow-sm transition-colors duration-200"
+                  className="w-7 h-7 bg-yellow-500 hover:bg-yellow-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors duration-200"
                   title="有灵感，添加笔记"
                 >
-                  <Lightbulb className="w-3 h-3" />
+                  <Lightbulb className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => handleBookmarkClick(message.id)}
-                  className="w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center shadow-sm transition-colors duration-200"
+                  className="w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors duration-200"
                   title="直接收藏"
                 >
-                  <Star className="w-3 h-3" />
+                  <Star className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
 
             {/* 已收藏标识 */}
             {message.isBookmarked && (
-              <div className="absolute -right-1 top-1">
-                <Star className="w-4 h-4 text-yellow-500 fill-current" />
+              <div className="absolute right-2 top-2">
+                <Star className="w-5 h-5 text-yellow-500 fill-current drop-shadow-sm" />
               </div>
             )}
           </div>
