@@ -33,6 +33,10 @@ export interface OutlineItem {
   order: number;
   /** 章节类型：章或节 */
   type: 'chapter' | 'section';
+  /** 章的编号（如：1, 2, 3） */
+  chapterNumber?: number; // 新增：章的编号
+  /** 父章节编号（仅对小节有效，如：1.1 的父章节是 1） */
+  parentChapter?: number; // 新增：父章节编号
   /** 父章节ID（仅对小节有效） */
   parentId?: string;
   /** 章节层级（1为章，2为节） */
