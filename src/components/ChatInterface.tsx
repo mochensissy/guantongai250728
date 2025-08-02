@@ -7,14 +7,17 @@
  * - 打字机效果
  * - 消息状态指示
  * - 自动滚动
+ * - 主题化的小白/高手模式差异
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Lightbulb, Star } from 'lucide-react';
+import { Bot, Lightbulb, Star } from 'lucide-react';
 import { marked } from 'marked';
 import Button from './ui/Button';
 import { ChatMessage, LearningLevel } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
+import { ThemedChatMessage } from './ThemedChatMessage';
+import { ThemedChatInput } from './ThemedChatInput';
 
 interface ChatInterfaceProps {
   /** 对话消息列表 */
@@ -40,7 +43,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   loading = false,
   placeholder = '输入您的问题...',
   disabled = false,
-  learningLevel = 'beginner',
+
 }) => {
   // 状态管理
   const [inputValue, setInputValue] = useState('');
@@ -53,101 +56,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // 主题相关 - 保持useTheme hook以确保主题上下文正常工作
-  useTheme();
-
-  /**
-   * 根据消息内容长度获取合适的最大宽度
-   * 优化短消息显示，避免过多空白
-   */
-  const getMessageMaxWidth = (content: string): string => {
-    const length = content.length;
-    
-    // 对于非常短的消息，使用固定宽度而不是百分比，避免空白过多
-    if (length <= 10) return 'min-w-[120px] max-w-[200px]';  // 极短消息：固定合理宽度
-    if (length <= 20) return 'min-w-[150px] max-w-[300px]';  // 短消息：适中固定宽度 
-    if (length <= 50) return 'max-w-[50%]';                  // 中等消息：使用百分比
-    if (length <= 100) return 'max-w-[65%]';                 // 较长消息
-    return 'max-w-[80%]';                                    // 长消息
-  };
-
-  /**
-   * 获取消息容器样式（根据学习模式差异化）
-   */
-  const getMessageContainerStyle = (isUser: boolean, content: string) => {
-    const maxWidth = getMessageMaxWidth(content);
-    // 优化样式：确保内容能够自适应，减少不必要的空白
-    const baseStyle = `${maxWidth} px-4 py-3 shadow-sm transition-all duration-200 break-words overflow-hidden inline-block`;
-    
-    if (learningLevel === 'beginner') {
-      // 小白模式：圆润友好的设计
-      if (isUser) {
-        return `${baseStyle} bg-[var(--color-primary-600)] text-white rounded-t-2xl rounded-bl-2xl rounded-br-lg`;
-      } else {
-        return `${baseStyle} bg-[var(--surface-primary)] border border-[var(--border-secondary)] rounded-t-2xl rounded-br-2xl rounded-bl-lg`;
-      }
-    } else {
-      // 高手模式：专业锐利的设计
-      if (isUser) {
-        return `${baseStyle} bg-[var(--color-primary-600)] text-white rounded-lg`;
-      } else {
-        return `${baseStyle} bg-[var(--surface-primary)] border border-[var(--border-secondary)] rounded-lg`;
-      }
-    }
-  };
-
-  /**
-   * 获取头像样式（根据学习模式差异化）
-   */
-  const getAvatarStyle = (isUser: boolean) => {
-    const baseStyle = 'w-8 h-8 flex items-center justify-center text-white flex-shrink-0';
-    
-    if (learningLevel === 'beginner') {
-      // 小白模式：圆润设计
-      if (isUser) {
-        return `${baseStyle} rounded-full bg-[var(--color-primary-600)]`;
-      } else {
-        return `${baseStyle} rounded-full bg-[var(--color-secondary-600)]`;
-      }
-    } else {
-      // 高手模式：更加锐利的设计
-      if (isUser) {
-        return `${baseStyle} rounded-lg bg-[var(--color-primary-600)]`;
-      } else {
-        return `${baseStyle} rounded-lg bg-[var(--color-secondary-600)]`;
-      }
-    }
-  };
-
-  /**
-   * 获取输入框样式（根据学习模式差异化）
-   */
-  const getInputContainerStyle = () => {
-    const baseStyle = 'border-2 bg-[var(--surface-primary)] transition-all duration-200 focus-within:border-[var(--border-focus)]';
-    
-    if (learningLevel === 'beginner') {
-      // 小白模式：圆润的输入框
-      return `${baseStyle} rounded-2xl border-[var(--border-primary)]`;
-    } else {
-      // 高手模式：锐利的输入框
-      return `${baseStyle} rounded-lg border-[var(--border-primary)]`;
-    }
-  };
-
-  /**
-   * 获取发送按钮样式（根据学习模式差异化）
-   */
-  const getSendButtonStyle = () => {
-    const baseStyle = 'bg-[var(--color-primary-600)] hover:bg-[var(--color-primary-700)] text-white transition-all duration-200 flex items-center justify-center';
-    
-    if (learningLevel === 'beginner') {
-      // 小白模式：圆形按钮
-      return `${baseStyle} w-10 h-10 rounded-full`;
-    } else {
-      // 高手模式：方形按钮
-      return `${baseStyle} w-10 h-10 rounded-lg`;
-    }
-  };
+  // 主题相关 - 获取当前主题状态
+  const { currentLevel } = useTheme();
 
   /**
    * 配置marked选项
@@ -200,31 +110,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }, 100);
   };
 
-  /**
-   * 处理键盘事件
-   */
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
 
-  /**
-   * 自动调整输入框高度
-   */
-  const adjustTextareaHeight = (textarea: HTMLTextAreaElement) => {
-    textarea.style.height = 'auto';
-    textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-  };
-
-  /**
-   * 处理输入变化
-   */
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputValue(e.target.value);
-    adjustTextareaHeight(e.target);
-  };
 
   /**
    * 格式化时间戳
@@ -386,207 +272,191 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
    * 渲染消息内容
    */
   const renderMessage = (message: ChatMessage) => {
-    const isUser = message.role === 'user';
+
     const isSystem = message.role === 'system';
     const isAssistant = message.role === 'assistant';
     const showChoiceButtons = isAssistant && shouldShowChoiceButtons(message.content);
 
-    return (
-      <div
-        key={message.id}
-        className={`flex items-start gap-3 p-4 ${
-          isUser ? 'flex-row-reverse' : ''
-        } ${isSystem ? 'justify-center' : ''}`}
-      >
-        {!isSystem && (
-          <div className={getAvatarStyle(isUser)}>
-            {isUser ? (
-              <User className="w-4 h-4" />
-            ) : (
-              <Bot className="w-4 h-4" />
-            )}
+    // 系统消息特殊处理
+    if (isSystem) {
+      return (
+        <div key={message.id} className="flex justify-center p-4">
+          <div className="inline-block bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-lg px-3 py-2 text-sm">
+            {message.content}
           </div>
-        )}
+        </div>
+      );
+    }
 
-        <div className={`flex-1 min-w-0 ${isUser ? 'flex justify-end' : 'flex justify-start'} ${isSystem ? 'text-center' : ''} ${isAssistant ? 'pr-16' : ''}`}>
-          <div className={
-            isSystem 
-              ? 'inline-block bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-lg px-3 py-2 text-sm'
-              : `${getMessageContainerStyle(isUser, message.content)} text-sm leading-relaxed ${isAssistant ? 'relative group' : ''}`
-          }>
-            
-            {/* 消息内容 */}
-            {isUser || isSystem ? (
-              <div className="chat-content">
-                {message.content}
-              </div>
-            ) : (
-              <div 
-                className="prose prose-sm max-w-none chat-content [&>*]:break-words [&>*]:overflow-wrap-anywhere"
-                dangerouslySetInnerHTML={{ 
-                  __html: renderMarkdown(message.content) 
-                }}
-              />
-            )}
-            
+    return (
+      <div key={message.id} className="relative group">
+        {/* 使用主题化消息组件 */}
+        <ThemedChatMessage
+          role={message.role as 'user' | 'assistant'}
+          content={isAssistant ? renderMarkdown(message.content) : message.content}
+          timestamp={formatTimestamp(message.timestamp)}
+          showAvatar={true}
+          isHTML={isAssistant}
+        />
 
-            {/* 时间戳 */}
-            {!isSystem && (
-              <div className={`
-                text-xs mt-2 opacity-70
-                ${isUser ? 'text-primary-100' : 'text-gray-500'}
-              `}>
-                {formatTimestamp(message.timestamp)}
-              </div>
-            )}
-
-            {/* AI消息的收藏按钮 */}
-            {isAssistant && !message.isBookmarked && (
-              <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
+        {/* 保持原有的收藏功能（在消息右上角浮动） */}
+        {isAssistant && (
+          <div className="absolute top-2 right-2 z-20 group-hover:opacity-100 opacity-0 transition-opacity duration-200 flex gap-1">
+            {!message.isBookmarked ? (
+              <>
                 <button
-                  onClick={() => handleInspirationClick(message.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleInspirationClick(message.id);
+                  }}
                   className="w-7 h-7 bg-yellow-500 hover:bg-yellow-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors duration-200"
                   title="有灵感，添加笔记"
                 >
                   <Lightbulb className="w-3.5 h-3.5" />
                 </button>
                 <button
-                  onClick={() => handleBookmarkClick(message.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleBookmarkClick(message.id);
+                  }}
                   className="w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors duration-200"
                   title="直接收藏"
                 >
                   <Star className="w-3.5 h-3.5" />
                 </button>
-              </div>
-            )}
-
-            {/* 已收藏标识 */}
-            {message.isBookmarked && (
-              <div className="absolute right-2 top-2">
+              </>
+            ) : (
+              <div className="w-7 h-7 flex items-center justify-center">
                 <Star className="w-5 h-5 text-yellow-500 fill-current drop-shadow-sm" />
               </div>
             )}
           </div>
+        )}
 
-          {/* AI消息的选择按钮 */}
-          {showChoiceButtons && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {getChoiceButtonTexts(message.content).map((choice, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleChoiceClick(choice)}
-                  className={`
-                    px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200
-                    ${index === 0 
-                      ? 'bg-primary-600 hover:bg-primary-700 text-white' 
-                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
-                    }
-                  `}
-                >
-                  {choice}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* AI消息的选择按钮 */}
+        {showChoiceButtons && (
+          <div className="mt-3 flex flex-wrap gap-2 px-4">
+            {getChoiceButtonTexts(message.content).map((choice, index) => (
+              <button
+                key={index}
+                onClick={() => handleChoiceClick(choice)}
+                className={`
+                  px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200
+                  ${index === 0 
+                    ? 'bg-[var(--surface-message-user)] hover:bg-[var(--color-primary-700)] text-[var(--text-inverse)]' 
+                    : 'bg-[var(--surface-primary)] hover:bg-[var(--border-light)] text-[var(--text-primary)] border border-[var(--border-primary)]'
+                  }
+                `}
+              >
+                {choice}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
 
   return (
     <>
-    <div className="flex flex-col h-full bg-white overflow-hidden">
-      {/* 消息列表 */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-        <div className="min-h-full pb-4">
-          {/* 欢迎消息 */}
-          {messages.length === 0 && (
-            <div className="flex items-center justify-center h-full p-8">
-              <div className="text-center max-w-md">
-                <div className="w-16 h-16 bg-secondary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Bot className="w-8 h-8 text-secondary-600" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  AI私教已就绪
-                </h3>
-                <p className="text-gray-600 text-sm">
-                  我将根据您上传的文档内容，为您提供个性化的学习引导。请随时提问！
-                </p>
+    <div className="flex flex-col h-full overflow-hidden" style={{ backgroundColor: 'var(--bg-chat)' }}>
+      {/* 消息列表容器 - 使用主题化样式 */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0" style={{ padding: 'var(--spacing-container)' }}>
+        {/* 欢迎消息 */}
+        {messages.length === 0 && (
+          <div className="flex items-center justify-center h-full p-8">
+            <div className="text-center max-w-md">
+              <div 
+                className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                style={{
+                  backgroundColor: 'var(--color-secondary-100)',
+                  borderRadius: currentLevel === 'beginner' ? '50%' : 'var(--radius-lg)'
+                }}
+              >
+                <Bot className="w-8 h-8" style={{ color: 'var(--color-secondary-600)' }} />
               </div>
+              <h3 
+                className="text-lg font-medium mb-2"
+                style={{ 
+                  color: 'var(--text-primary)',
+                  fontSize: 'var(--font-size-lg)',
+                  fontWeight: 'var(--font-weight-semibold)'
+                }}
+              >
+                AI私教已就绪
+              </h3>
+              <p 
+                className="text-sm"
+                style={{ 
+                  color: 'var(--text-secondary)',
+                  fontSize: 'var(--font-size-sm)'
+                }}
+              >
+                我将根据您上传的文档内容，为您提供个性化的学习引导。请随时提问！
+              </p>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* 消息列表 */}
-          {messages.map(renderMessage)}
+        {/* 消息列表 */}
+        {messages.map(renderMessage)}
 
-          {/* AI打字指示器 */}
-          {isTyping && (
-            <div className="flex items-start gap-3 p-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary-100 text-secondary-700 flex items-center justify-center">
-                <Bot className="w-4 h-4" />
-              </div>
-              <div className="flex-1">
-                <div className="inline-block bg-gray-100 rounded-lg rounded-bl-sm p-3">
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm text-gray-600">AI私教正在思考</span>
-                    <div className="flex gap-1 ml-2">
-                      <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse"></div>
-                      <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                      <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-                    </div>
+        {/* AI打字指示器 - 主题化 */}
+        {isTyping && (
+          <div className="flex items-start gap-3 p-4">
+            <div 
+              className="flex-shrink-0 w-8 h-8 flex items-center justify-center"
+              style={{
+                backgroundColor: 'var(--color-secondary-100)',
+                color: 'var(--color-secondary-700)',
+                borderRadius: currentLevel === 'beginner' ? '50%' : 'var(--radius-md)'
+              }}
+            >
+              <Bot className="w-4 h-4" />
+            </div>
+            <div className="flex-1">
+              <div 
+                className="inline-block p-3"
+                style={{
+                  backgroundColor: 'var(--surface-primary)',
+                  borderRadius: 'var(--radius-message)',
+                  border: `1px solid var(--border-light)`
+                }}
+              >
+                <div className="flex items-center gap-1">
+                  <span 
+                    className="text-sm"
+                    style={{ 
+                      color: 'var(--text-secondary)',
+                      fontSize: 'var(--font-size-sm)'
+                    }}
+                  >
+                    AI私教正在思考
+                  </span>
+                  <div className="flex gap-1 ml-2">
+                    <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse"></div>
+                    <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-1 h-1 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
                   </div>
                 </div>
               </div>
             </div>
-          )}
-
-          {/* 滚动锚点 */}
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
-
-      {/* 输入区域 */}
-      <div className="border-t border-gray-200 p-4 flex-shrink-0">
-        <div className={`flex items-end gap-3 ${getInputContainerStyle()} p-2`}>
-          {/* 输入框 */}
-          <div className="flex-1">
-            <textarea
-              ref={inputRef}
-              value={inputValue}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              disabled={disabled || loading}
-              rows={1}
-              className="
-                w-full px-3 py-2 bg-transparent border-none resize-none
-                focus:outline-none
-                disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed
-                text-sm leading-relaxed transition-colors duration-200 text-[var(--text-primary)]
-                placeholder-[var(--text-tertiary)]
-              "
-              style={{ minHeight: '44px', maxHeight: '120px' }}
-            />
           </div>
+        )}
 
-          {/* 发送按钮 */}
-          <button
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || loading || disabled}
-            className={`
-              ${getSendButtonStyle()}
-              disabled:opacity-50 disabled:cursor-not-allowed
-            `}
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </button>
-        </div>
-
-        {/* 提示文本 */}
-        <div className="mt-2 text-xs text-gray-500">
-          按 Enter 发送，Shift + Enter 换行
-        </div>
+        {/* 滚动锚点 */}
+        <div ref={messagesEndRef} />
       </div>
+
+      {/* 输入区域 - 使用主题化组件 */}
+      <ThemedChatInput
+        value={inputValue}
+        onChange={setInputValue}
+        onSend={handleSendMessage}
+        loading={loading}
+        disabled={disabled}
+        placeholder={placeholder}
+      />
     </div>
 
     {/* 灵感笔记模态框 */}

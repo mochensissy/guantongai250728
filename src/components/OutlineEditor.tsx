@@ -22,6 +22,7 @@ import {
 import Button from './ui/Button';
 import Input from './ui/Input';
 import { OutlineItem } from '../types';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface OutlineEditorProps {
   /** 大纲项目列表 */
@@ -46,6 +47,10 @@ const OutlineEditor: React.FC<OutlineEditorProps> = ({
   readonly = false,
   showNumbers = true,
 }) => {
+  // 主题相关
+  const { currentLevel, currentTheme } = useTheme();
+  const isBeginner = currentLevel === 'beginner';
+  
   // 编辑状态
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
@@ -208,18 +213,33 @@ const OutlineEditor: React.FC<OutlineEditorProps> = ({
     
     return (
       <div key={item.id}>
+        
         {/* 主项目 */}
         <div
           className={`
-            group relative bg-white border rounded-lg transition-all duration-200
-            ${activeChapterId === item.id 
-              ? 'border-primary-300 bg-primary-50 shadow-sm' 
-              : 'border-gray-200 hover:border-gray-300'
-            }
+            group relative border cursor-pointer
+            ${!isChapter ? 'ml-4 mt-2' : 'mb-2'}
             ${draggedId === item.id ? 'opacity-50' : ''}
-            ${readonly ? 'cursor-pointer hover:bg-gray-50' : ''}
-            ${isChild ? 'ml-6 mt-2' : 'mb-2'}
+            ${isChapter ? 'chapter-item' : 'section-item'}
           `}
+          style={{
+            backgroundColor: activeChapterId === item.id 
+              ? 'var(--surface-selected)' 
+              : 'transparent', // 统一使用透明背景，更清晰简洁
+            borderColor: activeChapterId === item.id 
+              ? 'var(--border-focus)' 
+              : 'var(--border-light)', // 统一使用淡边框
+            borderRadius: 'var(--radius-md)', // 统一圆角
+            borderWidth: activeChapterId === item.id ? '2px' : '1px', // 只有选中时用粗边框
+            boxShadow: activeChapterId === item.id 
+              ? 'var(--shadow-sm)' // 减少阴影强度
+              : 'none', // 去除默认阴影
+            transition: 'var(--transition-normal)',
+            transform: `scale(${draggedId === item.id ? '0.98' : '1'})`,
+            // 统一使用合适的padding，不过分强调章节
+            padding: '12px',
+            marginBottom: isChapter ? '8px' : '4px', // 减少章节间距
+          }}
           draggable={!readonly && editingId !== item.id}
           onDragStart={(e) => handleDragStart(e, item.id)}
           onDragEnd={handleDragEnd}
@@ -227,7 +247,7 @@ const OutlineEditor: React.FC<OutlineEditorProps> = ({
           onDrop={(e) => handleDrop(e, item.id)}
           onClick={() => handleChapterClick(item.id)}
         >
-          <div className="flex items-center p-3">
+          <div className="flex items-center p-2">
             {/* 拖拽手柄 */}
             {!readonly && (
               <div className="opacity-0 group-hover:opacity-100 transition-opacity mr-2">
@@ -237,22 +257,40 @@ const OutlineEditor: React.FC<OutlineEditorProps> = ({
 
             {/* 章节序号 */}
             {showNumbers && (
-              <div className={`
-                flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mr-3 text-xs font-medium relative
-                ${activeChapterId === item.id 
-                  ? 'bg-primary-600 text-white' 
-                  : isChapter
-                  ? 'bg-gray-200 text-gray-700'
-                  : 'bg-gray-100 text-gray-600'
-                }
-                ${isChapter && readonly ? 'cursor-default' : ''}
-              `}>
+              <div 
+                className={`flex-shrink-0 flex items-center justify-center mr-2 relative ${isChapter ? 'w-7 h-7' : 'w-6 h-6'}`}
+                style={{
+                  backgroundColor: activeChapterId === item.id 
+                    ? 'var(--color-primary-600)' 
+                    : isChapter
+                    ? 'var(--color-primary-100)' // 章节用更淡的背景色
+                    : 'var(--color-secondary-100)',
+                  color: activeChapterId === item.id 
+                    ? 'var(--text-inverse)' 
+                    : isChapter 
+                    ? 'var(--color-primary-700)' // 章节用深色文字，更清晰
+                    : 'var(--text-primary)',
+                  borderRadius: 'var(--radius-sm)', // 统一使用小圆角
+                  fontSize: 'var(--font-size-sm)', // 统一字体大小
+                  fontWeight: isChapter ? 'var(--font-weight-semibold)' : 'var(--font-weight-medium)', // 章节稍微加粗
+                  transition: 'var(--transition-normal)',
+                  // 去除夸张的边框和阴影
+                  border: 'none',
+                  boxShadow: 'none',
+                }}
+              >
                 {isChapter ? (item.title.match(/第(\d+)章/) ? item.title.match(/第(\d+)章/)[1] : index + 1) : '•'}
                 
                 {/* 完成状态标志 */}
                 {item.isCompleted && (
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full flex items-center justify-center">
-                    <CheckCircle className="w-2 h-2 text-white" />
+                  <div 
+                    className="absolute -top-1 -right-1 w-3 h-3 flex items-center justify-center"
+                    style={{
+                      backgroundColor: 'var(--color-success-500)',
+                      borderRadius: '50%',
+                    }}
+                  >
+                    <CheckCircle className="w-2 h-2" style={{ color: 'var(--text-inverse)' }} />
                   </div>
                 )}
               </div>
@@ -270,27 +308,58 @@ const OutlineEditor: React.FC<OutlineEditorProps> = ({
                 />
               ) : (
                 <div className="flex items-center">
-                  <span className={`
-                    text-sm truncate flex items-center gap-2
-                    ${activeChapterId === item.id ? 'text-primary-900' : 'text-gray-900'}
-                    ${isChapter ? 'font-bold text-gray-800' : 'font-medium'}
-                    ${isChapter && readonly ? 'cursor-default' : ''}
-                  `}>
+                  <span 
+                    className="truncate flex items-center gap-2"
+                    style={{
+                      fontSize: isChapter 
+                        ? (isBeginner ? 'var(--font-size-xl)' : 'var(--font-size-lg)') // 章节字体更大
+                        : (isBeginner ? 'var(--font-size-base)' : 'var(--font-size-sm)'),
+                      lineHeight: isBeginner ? 'var(--line-height-relaxed)' : 'var(--line-height-normal)',
+                      fontWeight: isChapter ? 'var(--font-weight-bold)' : 'var(--font-weight-medium)',
+                      color: activeChapterId === item.id 
+                        ? 'var(--color-primary-700)' 
+                        : isChapter 
+                        ? 'var(--color-primary-700)' // 章节用更深的主色调文字
+                        : 'var(--text-primary)',
+                      transition: 'var(--transition-normal)',
+                      // 章节标题增加文字阴影
+                      textShadow: isChapter ? '0 1px 2px rgba(0, 0, 0, 0.1)' : 'none',
+                    }}
+                  >
                     {item.title}
                     {item.isCompleted && (
-                      <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                      <span 
+                        className="px-2 py-1"
+                        style={{
+                          fontSize: 'var(--font-size-xs)',
+                          color: 'var(--color-success-600)',
+                          backgroundColor: 'var(--color-success-100)',
+                          borderRadius: isBeginner ? 'var(--radius-full)' : 'var(--radius-sm)',
+                        }}
+                      >
                         已完成
                       </span>
                     )}
-                    {/* 预估时间显示 */}
-                    {item.estimatedMinutes && !isChapter && (
-                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full ml-2">
+                    {/* 预估时间显示 - 仅在小白模式下显示 */}
+                    {item.estimatedMinutes && !isChapter && isBeginner && (
+                      <span 
+                        className="px-2 py-1 ml-2"
+                        style={{
+                          fontSize: 'var(--font-size-xs)',
+                          color: 'var(--text-muted)',
+                          backgroundColor: 'var(--surface-secondary)',
+                          borderRadius: 'var(--radius-full)',
+                        }}
+                      >
                         约 {item.estimatedMinutes} 分钟
                       </span>
                     )}
                   </span>
                   {readonly && !isChapter && (
-                    <ChevronRight className="w-4 h-4 text-gray-400 ml-2 flex-shrink-0" />
+                    <ChevronRight 
+                      className="w-4 h-4 ml-2 flex-shrink-0" 
+                      style={{ color: 'var(--text-tertiary)' }}
+                    />
                   )}
                 </div>
               )}
@@ -298,7 +367,12 @@ const OutlineEditor: React.FC<OutlineEditorProps> = ({
 
             {/* 操作按钮 */}
             {!readonly && (
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div 
+                className="flex items-center gap-1 opacity-0 group-hover:opacity-100"
+                style={{
+                  transition: isBeginner ? 'var(--transition-slow)' : 'var(--transition-fast)',
+                }}
+              >
                 {editingId === item.id ? (
                   <>
                     <Button
@@ -306,14 +380,20 @@ const OutlineEditor: React.FC<OutlineEditorProps> = ({
                       size="sm"
                       onClick={saveEdit}
                       icon={<Check className="w-3 h-3" />}
-                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                      style={{
+                        color: 'var(--color-success-600)',
+                        borderRadius: isBeginner ? 'var(--radius-md)' : 'var(--radius-sm)',
+                      }}
                     />
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={cancelEdit}
                       icon={<X className="w-3 h-3" />}
-                      className="text-gray-500 hover:text-gray-700"
+                      style={{
+                        color: 'var(--text-secondary)',
+                        borderRadius: isBeginner ? 'var(--radius-md)' : 'var(--radius-sm)',
+                      }}
                     />
                   </>
                 ) : (
@@ -324,8 +404,11 @@ const OutlineEditor: React.FC<OutlineEditorProps> = ({
                         size="sm"
                         onClick={() => addNewItem('section', item.id)}
                         icon={<Plus className="w-3 h-3" />}
-                        className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
                         title="添加小节"
+                        style={{
+                          color: 'var(--color-info-600)',
+                          borderRadius: isBeginner ? 'var(--radius-md)' : 'var(--radius-sm)',
+                        }}
                       />
                     )}
                     <Button
@@ -333,14 +416,20 @@ const OutlineEditor: React.FC<OutlineEditorProps> = ({
                       size="sm"
                       onClick={() => startEditing(item)}
                       icon={<Edit2 className="w-3 h-3" />}
-                      className="text-gray-500 hover:text-gray-700"
+                      style={{
+                        color: 'var(--text-secondary)',
+                        borderRadius: isBeginner ? 'var(--radius-md)' : 'var(--radius-sm)',
+                      }}
                     />
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => deleteItem(item.id)}
                       icon={<Trash2 className="w-3 h-3" />}
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      style={{
+                        color: 'var(--color-danger-600)',
+                        borderRadius: isBeginner ? 'var(--radius-md)' : 'var(--radius-sm)',
+                      }}
                     />
                   </>
                 )}
@@ -368,32 +457,57 @@ const OutlineEditor: React.FC<OutlineEditorProps> = ({
   };
 
   return (
-    <div className="space-y-2">
+    <div 
+      style={{ 
+        gap: isBeginner ? 'var(--spacing-element)' : 'var(--spacing-message)',
+        padding: 'var(--spacing-container)',
+        backgroundColor: 'var(--surface-primary)',
+        borderRadius: 'var(--radius-lg)',
+        border: `1px solid var(--border-secondary)`,
+      }}
+      className="flex flex-col"
+    >
       {/* 大纲列表 - 只显示顶级章节，子节点在renderOutlineItem中处理 */}
-      {getTopLevelChapters().map((chapter, index) => 
-        renderOutlineItem(chapter, index)
-      )}
+      <div style={{ gap: isBeginner ? 'var(--spacing-element)' : 'var(--spacing-message)' }} className="flex flex-col">
+        {getTopLevelChapters().map((chapter, index) => 
+          renderOutlineItem(chapter, index)
+        )}
+      </div>
 
       {/* 添加新章节按钮 */}
       {!readonly && (
-        <div className="space-y-2">
+        <div style={{ marginTop: 'var(--spacing-section)' }}>
           <Button
             variant="outline"
             size="sm"
             onClick={() => addNewItem('chapter')}
             icon={<Plus className="w-4 h-4" />}
-            className="w-full border-dashed text-gray-600 hover:text-gray-900 hover:border-solid"
+            className="w-full border-dashed"
+            style={{
+              color: 'var(--text-secondary)',
+              borderColor: 'var(--border-secondary)',
+              borderRadius: isBeginner ? 'var(--radius-lg)' : 'var(--radius-md)',
+              fontSize: isBeginner ? 'var(--font-size-base)' : 'var(--font-size-sm)',
+              padding: isBeginner ? 'var(--spacing-element)' : 'var(--spacing-message)',
+              transition: 'var(--transition-normal)',
+            }}
           >
-            添加章节
+            {isBeginner ? '+ 添加新章节' : '添加章节'}
           </Button>
         </div>
       )}
 
       {/* 空状态 */}
       {items.length === 0 && (
-        <div className="text-center py-8 text-gray-500">
-          <div className="text-sm">
-            {readonly ? '暂无学习大纲' : '点击上方按钮添加第一个章节'}
+        <div 
+          className="text-center py-8"
+          style={{
+            color: 'var(--text-tertiary)',
+            fontSize: isBeginner ? 'var(--font-size-base)' : 'var(--font-size-sm)',
+          }}
+        >
+          <div>
+            {readonly ? '暂无学习大纲' : (isBeginner ? '点击上方按钮开始创建您的学习大纲' : '点击上方按钮添加第一个章节')}
           </div>
         </div>
       )}

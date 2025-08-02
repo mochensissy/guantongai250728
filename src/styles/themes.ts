@@ -44,12 +44,17 @@ export interface ThemeConfig {
     primary: string;    // 主背景
     secondary: string;  // 次要背景
     tertiary: string;   // 第三级背景
+    chat: string;       // 聊天区域背景
   };
   /** 表面色（卡片、弹窗等） */
   surface: {
     primary: string;
     elevated: string;   // 悬浮状态
     selected: string;   // 选中状态
+    message: {
+      user: string;     // 用户消息背景
+      assistant: string; // AI消息背景
+    };
   };
   /** 文字色系 */
   text: {
@@ -57,12 +62,14 @@ export interface ThemeConfig {
     secondary: string;  // 次要文字
     tertiary: string;   // 辅助文字
     inverse: string;    // 反色文字（用于深色背景）
+    muted: string;      // 弱化文字
   };
   /** 边框色系 */
   border: {
     primary: string;
     secondary: string;
     focus: string;      // 聚焦边框
+    light: string;      // 轻边框
   };
   /** 圆角设置 */
   borderRadius: {
@@ -71,6 +78,7 @@ export interface ThemeConfig {
     lg: string;
     xl: string;
     full: string;
+    message: string;    // 消息气泡圆角
   };
   /** 阴影设置 */
   shadows: {
@@ -78,17 +86,50 @@ export interface ThemeConfig {
     md: string;
     lg: string;
     xl: string;
+    message: string;    // 消息阴影
   };
-  /** 字体权重 */
-  fontWeight: {
-    normal: string;
-    medium: string;
-    semibold: string;
-    bold: string;
+  /** 字体设置 */
+  typography: {
+    fontSize: {
+      xs: string;
+      sm: string;
+      base: string;
+      lg: string;
+      xl: string;
+    };
+    lineHeight: {
+      tight: string;
+      normal: string;
+      relaxed: string;
+    };
+    weight: {
+      normal: string;
+      medium: string;
+      semibold: string;
+      bold: string;
+    };
   };
-  /** 间距倍数（用于padding、margin） */
+  /** 间距设置 */
   spacing: {
     multiplier: number;
+    container: string;  // 容器内边距
+    section: string;    // 区块间距
+    element: string;    // 元素间距
+    message: string;    // 消息间距
+  };
+  /** 动画设置 */
+  transitions: {
+    fast: string;       // 快速动画
+    normal: string;     // 标准动画  
+    slow: string;       // 慢速动画
+  };
+  /** 特殊效果 */
+  effects: {
+    blur: string;       // 模糊效果
+    scale: {
+      hover: string;    // 悬停缩放
+      active: string;   // 点击缩放
+    };
   };
 }
 
@@ -124,44 +165,83 @@ export const beginnerTheme: ThemeConfig = {
     primary: '#f9fafb',     // 非常浅的灰色 - 主背景
     secondary: '#f3f4f6',   // 浅灰色 - 次要区域背景
     tertiary: '#e5e7eb',    // 稍深灰色 - 分割区域
+    chat: '#fefefe',        // 聊天区域背景 - 温馨白色
   },
   surface: {
     primary: '#ffffff',      // 纯白色 - 卡片背景
     elevated: '#ffffff',     // 纯白色 - 悬浮卡片
     selected: '#ecfdf5',     // 浅绿色 - 选中状态背景
+    message: {
+      user: '#10b981',       // 用户消息 - 主绿色
+      assistant: '#ffffff',  // AI消息 - 白色
+    },
   },
   text: {
     primary: '#374151',      // 深灰色 - 主要文字
     secondary: '#6b7280',    // 中灰色 - 次要文字
     tertiary: '#9ca3af',     // 浅灰色 - 辅助文字
     inverse: '#ffffff',      // 白色 - 反色文字
+    muted: '#d1d5db',        // 弱化文字
   },
   border: {
     primary: '#d1d5db',      // 浅灰色边框
     secondary: '#e5e7eb',    // 更浅的边框
     focus: '#10b981',        // 绿色聚焦边框
+    light: '#f3f4f6',        // 轻边框
   },
   borderRadius: {
-    sm: '0.5rem',     // 8px - 圆润的小圆角
-    md: '0.75rem',    // 12px - 圆润的中等圆角
-    lg: '1rem',       // 16px - 圆润的大圆角
-    xl: '1.5rem',     // 24px - 非常圆润
-    full: '9999px',   // 完全圆形
+    sm: '0.5rem',       // 8px - 圆润的小圆角
+    md: '0.75rem',      // 12px - 圆润的中等圆角
+    lg: '1rem',         // 16px - 圆润的大圆角
+    xl: '1.5rem',       // 24px - 非常圆润
+    full: '9999px',     // 完全圆形
+    message: '1.25rem', // 20px - 消息气泡圆角
   },
   shadows: {
     sm: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
     md: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
     lg: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
     xl: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+    message: '0 2px 8px 0 rgba(0, 0, 0, 0.08), 0 1px 3px 0 rgba(0, 0, 0, 0.1)',
   },
-  fontWeight: {
-    normal: '400',
-    medium: '500',
-    semibold: '600',
-    bold: '700',
+  typography: {
+    fontSize: {
+      xs: '0.75rem',    // 12px
+      sm: '0.875rem',   // 14px
+      base: '1rem',     // 16px - 舒适阅读
+      lg: '1.125rem',   // 18px
+      xl: '1.25rem',    // 20px
+    },
+    lineHeight: {
+      tight: '1.25',    // 紧密行高
+      normal: '1.5',    // 标准行高
+      relaxed: '1.75',  // 宽松行高 - 小白模式偏爱
+    },
+    weight: {
+      normal: '400',
+      medium: '500',
+      semibold: '600',
+      bold: '700',
+    },
   },
   spacing: {
-    multiplier: 1.2,  // 稍大的间距，营造轻松感
+    multiplier: 1.2,        // 稍大的间距，营造轻松感
+    container: '2rem',      // 32px - 宽裕的容器内边距
+    section: '1.5rem',      // 24px - 区块间距
+    element: '1rem',        // 16px - 元素间距
+    message: '1.25rem',     // 20px - 消息间距
+  },
+  transitions: {
+    fast: '0.15s ease-out',     // 快速动画
+    normal: '0.3s ease-out',    // 标准动画 - 舒缓
+    slow: '0.5s ease-out',      // 慢速动画
+  },
+  effects: {
+    blur: 'blur(4px)',          // 模糊效果
+    scale: {
+      hover: '1.02',            // 轻微悬停缩放
+      active: '0.98',           // 点击缩放
+    },
   },
 };
 
@@ -197,44 +277,83 @@ export const expertTheme: ThemeConfig = {
     primary: '#f8fafc',     // 非常浅的蓝灰色 - 专业感
     secondary: '#f1f5f9',   // 浅蓝灰色
     tertiary: '#e2e8f0',    // 稍深蓝灰色
+    chat: '#fcfcfd',        // 聊天区域背景 - 简洁白色
   },
   surface: {
     primary: '#ffffff',      // 纯白色
     elevated: '#ffffff',     // 纯白色 - 保持简洁
     selected: '#eef2ff',     // 浅紫色 - 选中状态
+    message: {
+      user: '#6366f1',       // 用户消息 - 主紫色
+      assistant: '#ffffff',  // AI消息 - 白色
+    },
   },
   text: {
     primary: '#1f2937',      // 深灰色 - 高对比度
     secondary: '#4b5563',    // 中灰色
     tertiary: '#6b7280',     // 浅灰色
     inverse: '#ffffff',      // 白色
+    muted: '#9ca3af',        // 弱化文字
   },
   border: {
     primary: '#e5e7eb',      // 浅灰色边框 - 清晰边界
     secondary: '#f3f4f6',    // 更浅边框
     focus: '#6366f1',        // 紫色聚焦边框
+    light: '#f1f5f9',        // 轻边框
   },
   borderRadius: {
-    sm: '0.25rem',    // 4px - 锐利的小圆角
-    md: '0.5rem',     // 8px - 锐利的中等圆角
-    lg: '0.625rem',   // 10px - 锐利的大圆角
-    xl: '0.75rem',    // 12px - 适度圆角
-    full: '9999px',   // 完全圆形（仅用于特殊元素）
+    sm: '0.25rem',      // 4px - 锐利的小圆角
+    md: '0.5rem',       // 8px - 锐利的中等圆角
+    lg: '0.625rem',     // 10px - 锐利的大圆角
+    xl: '0.75rem',      // 12px - 适度圆角
+    full: '9999px',     // 完全圆形（仅用于特殊元素）
+    message: '0.75rem', // 12px - 消息气泡圆角
   },
   shadows: {
     sm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
     md: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
     lg: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
     xl: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+    message: '0 1px 4px 0 rgba(0, 0, 0, 0.06), 0 1px 2px 0 rgba(0, 0, 0, 0.1)',
   },
-  fontWeight: {
-    normal: '400',
-    medium: '500',
-    semibold: '600',
-    bold: '700',
+  typography: {
+    fontSize: {
+      xs: '0.6875rem',  // 11px
+      sm: '0.8125rem',  // 13px
+      base: '0.9375rem', // 15px - 紧凑阅读
+      lg: '1rem',       // 16px
+      xl: '1.125rem',   // 18px
+    },
+    lineHeight: {
+      tight: '1.2',     // 紧密行高 - 高手模式偏爱
+      normal: '1.4',    // 标准行高
+      relaxed: '1.6',   // 相对宽松行高
+    },
+    weight: {
+      normal: '400',
+      medium: '500',
+      semibold: '600',
+      bold: '700',
+    },
   },
   spacing: {
-    multiplier: 1.0,  // 标准间距，保持紧凑高效
+    multiplier: 1.0,        // 标准间距，保持紧凑高效
+    container: '1.5rem',    // 24px - 紧凑的容器内边距
+    section: '1rem',        // 16px - 区块间距
+    element: '0.75rem',     // 12px - 元素间距
+    message: '0.875rem',    // 14px - 消息间距
+  },
+  transitions: {
+    fast: '0.1s ease-in-out',   // 快速动画 - 高效感
+    normal: '0.2s ease-in-out', // 标准动画
+    slow: '0.3s ease-in-out',   // 慢速动画
+  },
+  effects: {
+    blur: 'blur(2px)',          // 轻微模糊效果
+    scale: {
+      hover: '1.01',            // 细微悬停缩放
+      active: '0.99',           // 点击缩放
+    },
   },
 };
 
@@ -291,22 +410,27 @@ export const generateCSSVariables = (theme: ThemeConfig): Record<string, string>
     '--bg-primary': theme.background.primary,
     '--bg-secondary': theme.background.secondary,
     '--bg-tertiary': theme.background.tertiary,
+    '--bg-chat': theme.background.chat,
     
     // 表面色变量
     '--surface-primary': theme.surface.primary,
     '--surface-elevated': theme.surface.elevated,
     '--surface-selected': theme.surface.selected,
+    '--surface-message-user': theme.surface.message.user,
+    '--surface-message-assistant': theme.surface.message.assistant,
     
     // 文字色变量
     '--text-primary': theme.text.primary,
     '--text-secondary': theme.text.secondary,
     '--text-tertiary': theme.text.tertiary,
     '--text-inverse': theme.text.inverse,
+    '--text-muted': theme.text.muted,
     
     // 边框色变量
     '--border-primary': theme.border.primary,
     '--border-secondary': theme.border.secondary,
     '--border-focus': theme.border.focus,
+    '--border-light': theme.border.light,
     
     // 圆角变量
     '--radius-sm': theme.borderRadius.sm,
@@ -314,21 +438,45 @@ export const generateCSSVariables = (theme: ThemeConfig): Record<string, string>
     '--radius-lg': theme.borderRadius.lg,
     '--radius-xl': theme.borderRadius.xl,
     '--radius-full': theme.borderRadius.full,
+    '--radius-message': theme.borderRadius.message,
     
     // 阴影变量
     '--shadow-sm': theme.shadows.sm,
     '--shadow-md': theme.shadows.md,
     '--shadow-lg': theme.shadows.lg,
     '--shadow-xl': theme.shadows.xl,
+    '--shadow-message': theme.shadows.message,
     
-    // 字体权重变量
-    '--font-normal': theme.fontWeight.normal,
-    '--font-medium': theme.fontWeight.medium,
-    '--font-semibold': theme.fontWeight.semibold,
-    '--font-bold': theme.fontWeight.bold,
+    // 字体变量
+    '--font-size-xs': theme.typography.fontSize.xs,
+    '--font-size-sm': theme.typography.fontSize.sm,
+    '--font-size-base': theme.typography.fontSize.base,
+    '--font-size-lg': theme.typography.fontSize.lg,
+    '--font-size-xl': theme.typography.fontSize.xl,
+    '--line-height-tight': theme.typography.lineHeight.tight,
+    '--line-height-normal': theme.typography.lineHeight.normal,
+    '--line-height-relaxed': theme.typography.lineHeight.relaxed,
+    '--font-weight-normal': theme.typography.weight.normal,
+    '--font-weight-medium': theme.typography.weight.medium,
+    '--font-weight-semibold': theme.typography.weight.semibold,
+    '--font-weight-bold': theme.typography.weight.bold,
     
     // 间距变量
     '--spacing-multiplier': theme.spacing.multiplier.toString(),
+    '--spacing-container': theme.spacing.container,
+    '--spacing-section': theme.spacing.section,
+    '--spacing-element': theme.spacing.element,
+    '--spacing-message': theme.spacing.message,
+    
+    // 动画变量
+    '--transition-fast': theme.transitions.fast,
+    '--transition-normal': theme.transitions.normal,
+    '--transition-slow': theme.transitions.slow,
+    
+    // 效果变量
+    '--effect-blur': theme.effects.blur,
+    '--effect-scale-hover': theme.effects.scale.hover,
+    '--effect-scale-active': theme.effects.scale.active,
   };
 };
 

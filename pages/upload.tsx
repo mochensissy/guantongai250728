@@ -17,6 +17,7 @@ import OutlineEditor from '../src/components/OutlineEditor';
 import { DocumentParseResult, OutlineItem, LearningSession, APIConfig } from '../src/types';
 import { generateOutline, fixExistingOutline } from '../src/utils/aiService';
 import { saveSession, getAPIConfig } from '../src/utils/storage';
+import { ThemeProvider } from '../src/contexts/ThemeContext';
 
 /**
  * 生成唯一ID
@@ -35,7 +36,7 @@ const DocumentUploader = dynamic(() => import('../src/components/DocumentUploade
   )
 });
 
-const UploadPage: React.FC = () => {
+const UploadPageContent: React.FC = () => {
   const router = useRouter();
 
   // 状态管理
@@ -787,6 +788,14 @@ const UploadPage: React.FC = () => {
         )}
       </main>
     </div>
+  );
+};
+
+const UploadPage: React.FC = () => {
+  return (
+    <ThemeProvider>
+      <UploadPageContent />
+    </ThemeProvider>
   );
 };
 

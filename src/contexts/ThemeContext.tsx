@@ -171,6 +171,15 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
     return ThemeUtils.getModeDescription(currentLevel);
   }, [currentLevel]);
 
+  // 监听initialLevel变化并更新当前级别
+  useEffect(() => {
+    if (initialLevel && initialLevel !== currentLevel) {
+      console.log('🎨 ThemeProvider: initialLevel变化，从', currentLevel, '切换到', initialLevel);
+      setCurrentLevel(initialLevel);
+      saveToStorage(initialLevel);
+    }
+  }, [initialLevel, currentLevel, saveToStorage]);
+
   // 当主题变化时更新CSS变量
   useEffect(() => {
     updateCSSVariables(currentTheme);

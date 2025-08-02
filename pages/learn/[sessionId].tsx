@@ -13,10 +13,11 @@ import { useRouter } from 'next/router';
 import { ArrowLeft, Settings, BookOpen, MessageCircle, User, Zap } from 'lucide-react';
 import Button from '../../src/components/ui/Button';
 import ResizablePanel from '../../src/components/ResizablePanel';
-import OutlineEditor from '../../src/components/OutlineEditor';
+
 import ChatInterface from '../../src/components/ChatInterface';
 import CardManager from '../../src/components/CardManager';
-import { ThemeProvider } from '../../src/contexts/ThemeContext';
+import { ThemedOutlineSidebar } from '../../src/components/ThemedOutlineSidebar';
+import { ThemeProvider, useTheme } from '../../src/contexts/ThemeContext';
 import { 
   LearningSession, 
   ChatMessage, 
@@ -35,9 +36,11 @@ import {
 } from '../../src/utils/storage';
 import { sendChatMessage, summarizeCardTitle, purifyCardContent, fixExistingOutline } from '../../src/utils/aiService';
 
-const LearnPage: React.FC = () => {
+const LearnPageContent: React.FC = () => {
   const router = useRouter();
   const { sessionId } = router.query;
+  const { currentLevel } = useTheme();
+  const isBeginner = currentLevel === 'beginner';
 
   // 状态管理
   const [session, setSession] = useState<LearningSession | null>(null);
@@ -713,8 +716,7 @@ const LearnPage: React.FC = () => {
   }
 
   return (
-    <ThemeProvider initialLevel={session.learningLevel}>
-      <div className="h-screen bg-[var(--bg-primary)] flex flex-col">
+    <div className="h-screen bg-[var(--bg-primary)] flex flex-col">
         {/* 顶部导航栏 */}
         <header className="bg-[var(--surface-primary)] border-b border-[var(--border-secondary)] flex-shrink-0">
         <div className="flex items-center justify-between h-16 px-6">
@@ -771,67 +773,64 @@ const LearnPage: React.FC = () => {
       {/* 主体内容 */}
       <div className="flex-1 flex overflow-hidden">
         <div className="flex w-full">
-          {/* 左侧大纲面板 */}
-          <div className="w-1/4 min-w-[250px] max-w-[400px] h-full bg-[var(--surface-primary)] border-r border-[var(--border-secondary)] flex flex-col">
-            {/* 大纲头部 */}
-            <div className="p-6 border-b border-[var(--border-secondary)] flex-shrink-0">
-              <div className="flex items-center gap-2 mb-4">
-                <BookOpen className="w-5 h-5 text-[var(--color-primary-600)]" />
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">学习大纲</h2>
+          {/* 左侧大纲面板 - 缩减10%宽度 */}
+          <div className="w-[22%] min-w-[220px] max-w-[360px] h-full bg-[var(--surface-primary)] border-r border-[var(--border-secondary)] flex flex-col">
+            {/* 大纲头部 - 根据模式调整 */}
+            <div className={`${isBeginner ? 'p-4' : 'p-3'} border-b border-[var(--border-secondary)] flex-shrink-0`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-[var(--color-primary-600)]" />
+                  <h2 className={`${isBeginner ? 'text-base' : 'text-sm'} font-semibold text-[var(--text-primary)]`}>
+                    学习大纲
+                  </h2>
+                </div>
+                
+                {/* 进度显示 - 统一显示详细信息 */}
+                {(() => {
+                  const stats = getCompletionStats();
+                  const percentage = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+                  return (
+                    <div className="text-xs text-gray-500">
+                      {stats.completed}/{stats.total} ({percentage}%)
+                    </div>
+                  );
+                })()}
               </div>
               
-              {/* 进度信息 */}
-              <div className="text-sm text-gray-600">
-                <div className="space-y-1">
-                  <p>共 {session.outline.length} 个章节</p>
-                  {(() => {
-                    const stats = getCompletionStats();
-                    const percentage = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
-                    return (
-                      <div>
-                        <p className="text-green-600">已完成 {stats.completed} 个 ({percentage}%)</p>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                          <div
-                            className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-                {session.currentChapter && (
-                  <p className="mt-2 text-primary-600">
-                    当前：{session.outline.find(item => item.id === session.currentChapter)?.title}
-                  </p>
-                )}
-                
-                {/* 修复大纲按钮 */}
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleFixOutline}
-                    className="w-full text-xs"
-                  >
-                    🔧 修复大纲（新强化版）
-                  </Button>
-                  <p className="text-xs text-gray-500 mt-1">
-                    彻底重组章节结构，解决错位问题
-                  </p>
-                </div>
-              </div>
+              {/* 进度条 - 两种模式都显示 */}
+              {(() => {
+                const stats = getCompletionStats();
+                const percentage = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+                return (
+                  <div className="w-full bg-gray-200 rounded-full h-1 mb-2">
+                    <div
+                      className="bg-green-500 h-1 rounded-full transition-all duration-300"
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                );
+              })()}
+              
+              {/* 当前章节提示 - 仅小白模式显示 */}
+              {isBeginner && session.currentChapter && (
+                <p className="text-xs text-primary-600 truncate">
+                  当前：{session.outline.find(item => item.id === session.currentChapter)?.title}
+                </p>
+              )}
             </div>
 
             {/* 大纲内容 */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <OutlineEditor
-                items={session.outline}
-                onChange={() => {}} // 学习模式下不允许编辑大纲
-                activeChapterId={session.currentChapter}
-                onChapterClick={handleChapterClick}
-                readonly={true}
-                showNumbers={true}
+            <div className="flex-1 overflow-y-auto">
+              <ThemedOutlineSidebar
+                outline={session.outline.map(item => ({
+                  id: item.id,
+                  title: item.title,
+                  estimatedMinutes: item.estimatedMinutes,
+                  completed: item.isCompleted,
+                  type: item.type // 添加类型信息以便正确判断章节
+                }))}
+                currentChapter={session.currentChapter}
+                onChapterSelect={handleChapterClick}
               />
               
               {/* 章节完成操作 */}
@@ -854,6 +853,18 @@ const LearnPage: React.FC = () => {
                   </Button>
                 </div>
               )}
+            </div>
+            
+            {/* 修复功能 - 移至底部，紧凑设计 */}
+            <div className="flex-shrink-0 p-2 border-t border-gray-200 bg-gray-50">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleFixOutline}
+                className="w-full text-xs py-1"
+              >
+                🔧 修复大纲
+              </Button>
             </div>
           </div>
 
@@ -912,8 +923,8 @@ const LearnPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 右侧卡片管理面板 */}
-          <div className="w-1/5 min-w-[280px] max-w-[350px] h-full">
+          {/* 右侧卡片管理面板 - 适中宽度，提升可读性 */}
+          <div className="w-[20%] min-w-[280px] max-w-[360px] h-full">
             <CardManager
               key={cardManagerKey}
               sessionId={session.id}
@@ -923,6 +934,45 @@ const LearnPage: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const LearnPage: React.FC = () => {
+  const router = useRouter();
+  const { sessionId } = router.query;
+  const [learningLevel, setLearningLevel] = React.useState<'beginner' | 'expert'>('beginner');
+  
+  React.useEffect(() => {
+    if (!sessionId || typeof sessionId !== 'string') return;
+    
+    // 从会话数据中读取学习级别
+    try {
+      const session = getSessionById(sessionId);
+      console.log('🎨 当前会话的学习级别:', session?.learningLevel);
+      if (session && session.learningLevel) {
+        console.log('🎨 设置学习级别为:', session.learningLevel);
+        setLearningLevel(session.learningLevel);
+        // 同步到localStorage
+        localStorage.setItem('ai-tutor-ui-theme', session.learningLevel);
+        localStorage.setItem('selectedLearningMode', session.learningLevel);
+      } else {
+        // 如果会话中没有学习级别，从localStorage读取
+        const storedMode = localStorage.getItem('selectedLearningMode');
+        const storedTheme = localStorage.getItem('ai-tutor-ui-theme');
+        const level = storedMode || storedTheme;
+        console.log('🎨 从localStorage读取的级别:', level);
+        if (level === 'beginner' || level === 'expert') {
+          setLearningLevel(level);
+        }
+      }
+    } catch (error) {
+      console.error('读取学习级别失败:', error);
+    }
+  }, [sessionId]);
+
+  return (
+    <ThemeProvider initialLevel={learningLevel}>
+      <LearnPageContent />
     </ThemeProvider>
   );
 };
