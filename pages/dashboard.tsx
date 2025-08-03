@@ -20,36 +20,37 @@ import {
   deleteSession, 
   getAPIConfig, 
   saveAPIConfig 
-} from '../src/utils/storage';
-import { getCurrentUser } from '../src/utils/authService';
+} from '../src/utils/storageAdapter';
+import { useAuth } from '../src/contexts/AuthContext';
 import { useRouter } from 'next/router';
 
 const DashboardPage: React.FC = () => {
   const router = useRouter();
+  const { user, loading } = useAuth();
   
   // 状态管理
   const [sessions, setSessions] = useState<LearningSession[]>([]);
   const [apiConfig, setApiConfig] = useState<APIConfig | null>(null);
   const [showAPIConfigModal, setShowAPIConfigModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null);
 
   /**
    * 初始化数据加载和用户认证检查
    */
   useEffect(() => {
+    if (loading) {
+      return; // 还在加载认证状态
+    }
+
+    if (!user) {
+      console.log('用户未登录，跳转到首页');
+      router.push('/');
+      return;
+    }
+
     const initializeData = () => {
       try {
-        // 检查用户登录状态
-        const user = getCurrentUser();
-        if (!user) {
-          console.log('用户未登录，跳转到首页');
-          router.push('/');
-          return;
-        }
-        
-        setCurrentUser(user);
-        
+        // 加载用户数据
         const loadedSessions = getAllSessions();
         const loadedConfig = getAPIConfig();
         
@@ -63,7 +64,7 @@ const DashboardPage: React.FC = () => {
     };
 
     initializeData();
-  }, [router]);
+  }, [user, loading, router]);
 
   /**
    * 进入学习会话
@@ -111,7 +112,7 @@ const DashboardPage: React.FC = () => {
     router.push('/upload');
   };
 
-  if (isLoading) {
+  if (loading || isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -120,6 +121,11 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  // 如果用户未登录，不渲染内容（useEffect会处理跳转）
+  if (!user) {
+    return null;
   }
 
   return (

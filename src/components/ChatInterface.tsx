@@ -149,6 +149,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
    * 处理灵感收藏
    */
   const handleInspirationClick = (messageId: string) => {
+    console.log('💡 点击灵感按钮，messageId:', messageId);
     setSelectedMessageId(messageId);
     setInspirationNote('');
     setShowInspirationModal(true);
@@ -158,7 +159,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
    * 处理直接收藏
    */
   const handleBookmarkClick = (messageId: string) => {
+    // 防止重复点击
+    const button = document.activeElement as HTMLButtonElement;
+    if (button) {
+      button.disabled = true;
+      setTimeout(() => {
+        button.disabled = false;
+      }, 2000); // 2秒防抖
+    }
+    
     if (onBookmarkMessage) {
+      console.log('🔖 点击收藏按钮，messageId:', messageId);
       onBookmarkMessage(messageId, 'bookmark');
     }
   };

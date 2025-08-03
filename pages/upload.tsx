@@ -16,14 +16,18 @@ import Button from '../src/components/ui/Button';
 import OutlineEditor from '../src/components/OutlineEditor';
 import { DocumentParseResult, OutlineItem, LearningSession, APIConfig } from '../src/types';
 import { generateOutline, fixExistingOutline } from '../src/utils/aiService';
-import { saveSession, getAPIConfig } from '../src/utils/storage';
+import { storageAdapter } from '../src/utils/storageAdapter';
 import { ThemeProvider } from '../src/contexts/ThemeContext';
 
 /**
- * 生成唯一ID
+ * 生成UUID格式的唯一ID
  */
 const generateId = (): string => {
-  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0
+    const v = c == 'x' ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
 };
 
 // 动态导入DocumentUploader组件，禁用SSR
@@ -53,13 +57,16 @@ const UploadPageContent: React.FC = () => {
    * 检查API配置
    */
   useEffect(() => {
-    const config = getAPIConfig();
-    if (!config) {
-      router.push('/');
-      return;
-    }
-    setApiConfig(config);
-    setIsInitialLoading(false);
+    const loadConfig = async () => {
+      const config = await storageAdapter.getAPIConfig();
+      if (!config) {
+        router.push('/');
+        return;
+      }
+      setApiConfig(config);
+      setIsInitialLoading(false);
+    };
+    loadConfig();
   }, [router]);
 
   /**
@@ -370,7 +377,7 @@ const UploadPageContent: React.FC = () => {
         cards: [], // 初始化为空数组
       };
 
-      const success = saveSession(session);
+      const success = await storageAdapter.saveSession(session);
       
       if (success) {
         router.push(`/learn/${sessionId}`);

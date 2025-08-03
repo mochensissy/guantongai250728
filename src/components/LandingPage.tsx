@@ -29,7 +29,7 @@ import {
 import Button from './ui/Button';
 import Card from './ui/Card';
 import AuthModal from './AuthModal';
-import { getCurrentUser, isUserLoggedIn } from '../utils/authService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LandingPageProps {
   onGetStarted?: () => void;
@@ -45,6 +45,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
   onLogin,
   onAuthSuccess,
 }) => {
+  // 认证状态
+  const { user } = useAuth();
+  
   // 状态管理
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
@@ -129,22 +132,41 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
             {/* 操作按钮 */}
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLoginClick}
-                className="hidden sm:block"
-              >
-                登录
-              </Button>
-              
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleGetStartedClick}
-              >
-                免费使用
-              </Button>
+              {user ? (
+                /* 已登录状态 */
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-600 hidden sm:block">
+                    欢迎，{user.email}
+                  </span>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => window.location.href = '/dashboard'}
+                  >
+                    进入应用
+                  </Button>
+                </div>
+              ) : (
+                /* 未登录状态 */
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLoginClick}
+                    className="hidden sm:block"
+                  >
+                    登录
+                  </Button>
+                  
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleGetStartedClick}
+                  >
+                    免费使用
+                  </Button>
+                </>
+              )}
 
               {/* 移动端菜单按钮 */}
               <button
@@ -192,14 +214,25 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 >
                   用户评价
                 </a>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLoginClick}
-                  className="w-full justify-center sm:hidden"
-                >
-                  登录
-                </Button>
+                {user ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => window.location.href = '/dashboard'}
+                    className="w-full justify-center sm:hidden"
+                  >
+                    进入应用
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLoginClick}
+                    className="w-full justify-center sm:hidden"
+                  >
+                    登录
+                  </Button>
+                )}
               </nav>
             </div>
           )}

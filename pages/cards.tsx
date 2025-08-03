@@ -191,10 +191,14 @@ const CardsPage: React.FC = () => {
   };
 
   /**
-   * 生成卡片ID
+   * 生成UUID格式的卡片ID
    */
   const generateCardId = (): string => {
-    return `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0
+      const v = c == 'x' ? r : (r & 0x3 | 0x8)
+      return v.toString(16)
+    })
   };
 
   /**
@@ -290,7 +294,7 @@ const CardsPage: React.FC = () => {
       reviewCount: 0,
       difficulty: 3,
       sessionId: defaultSessionId,
-      messageId: `manual-${Date.now()}`,
+      messageId: generateCardId(), // 使用UUID格式的messageId
     };
 
     const success = addLearningCard(defaultSessionId, card);

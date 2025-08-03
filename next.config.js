@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: true,
-  },
+
   // 添加对外部资源的支持
   images: {
     domains: ['cdnjs.cloudflare.com'],

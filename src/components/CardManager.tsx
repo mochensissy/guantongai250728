@@ -173,6 +173,17 @@ const CardManager: React.FC<CardManagerProps> = ({
   }, [sessionId]);
 
   /**
+   * 定期检查卡片更新（避免重复卡片问题）
+   */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadCards();
+    }, 2000); // 每2秒检查一次卡片更新
+
+    return () => clearInterval(interval);
+  }, [sessionId]);
+
+  /**
    * 格式化时间
    */
   const formatTime = (timestamp: number): string => {

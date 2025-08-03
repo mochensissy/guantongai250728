@@ -27,13 +27,13 @@ import {
 } from '../../src/types';
 import { 
   getSessionById, 
-  saveSession, 
+  saveSession,
   updateSessionMessages,
   updateSessionCurrentChapter,
   getAPIConfig,
   markChapterCompleted,
   addLearningCard
-} from '../../src/utils/storage';
+} from '../../src/utils/storageAdapter';
 import { sendChatMessage, summarizeCardTitle, purifyCardContent, fixExistingOutline } from '../../src/utils/aiService';
 
 const LearnPageContent: React.FC = () => {
@@ -104,17 +104,25 @@ const LearnPageContent: React.FC = () => {
   }, [sessionId, router]);
 
   /**
-   * 生成消息ID
+   * 生成UUID格式的消息ID
    */
   const generateMessageId = (): string => {
-    return `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0
+      const v = c == 'x' ? r : (r & 0x3 | 0x8)
+      return v.toString(16)
+    })
   };
 
   /**
-   * 生成卡片ID
+   * 生成UUID格式的卡片ID
    */
   const generateCardId = (): string => {
-    return `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0
+      const v = c == 'x' ? r : (r & 0x3 | 0x8)
+      return v.toString(16)
+    })
   };
 
   /**
@@ -152,7 +160,7 @@ const LearnPageContent: React.FC = () => {
 
     setSession(updatedSession);
     // 保存会话和当前章节
-    saveSession(updatedSession);
+    await saveSession(updatedSession);
   };
 
   /**
@@ -488,7 +496,7 @@ const LearnPageContent: React.FC = () => {
   /**
    * 修复大纲数据，确保每个章节都有小节
    */
-  const handleFixOutline = () => {
+  const handleFixOutline = async () => {
     if (!session) return;
 
     try {
@@ -511,7 +519,7 @@ const LearnPageContent: React.FC = () => {
       };
 
       // 保存到localStorage
-      saveSession(updatedSession);
+      await saveSession(updatedSession);
       
       // 更新本地状态
       setSession(updatedSession);
@@ -549,10 +557,24 @@ const LearnPageContent: React.FC = () => {
    * 处理消息收藏为卡片
    */
   const handleBookmarkMessage = async (messageId: string, type: 'inspiration' | 'bookmark', userNote?: string) => {
-    if (!session || !apiConfig) return;
+    console.log('📝 handleBookmarkMessage 被调用，messageId:', messageId, 'type:', type);
+    
+    if (!session || !apiConfig) {
+      console.log('❌ session 或 apiConfig 缺失');
+      return;
+    }
 
     const message = session.messages.find(m => m.id === messageId);
-    if (!message || message.role !== 'assistant') return;
+    if (!message || message.role !== 'assistant') {
+      console.log('❌ 消息不存在或不是AI消息');
+      return;
+    }
+
+    // 检查消息是否已经被收藏
+    if (message.isBookmarked) {
+      console.log('⚠️ 消息已经被收藏，跳过');
+      return;
+    }
 
     try {
       // 首先提纯内容，然后基于提纯后的内容生成标题
@@ -584,7 +606,7 @@ const LearnPageContent: React.FC = () => {
       };
 
       // 保存卡片
-      const success = addLearningCard(session.id, card);
+      const success = await addLearningCard(session.id, card);
       if (success) {
         // 更新消息的收藏状态
         const updatedMessages = session.messages.map(m =>
@@ -630,7 +652,7 @@ const LearnPageContent: React.FC = () => {
         chapterId: session.currentChapter,
       };
 
-      const success = addLearningCard(session.id, card);
+      const success = await addLearningCard(session.id, card);
       if (success) {
         const updatedMessages = session.messages.map(m =>
           m.id === messageId 
@@ -640,7 +662,6 @@ const LearnPageContent: React.FC = () => {
         
         setSession(prev => prev ? { ...prev, messages: updatedMessages } : null);
         updateSessionMessages(session.id, updatedMessages);
-        setCardManagerKey(prev => prev + 1);
       }
     }
   };
@@ -689,7 +710,9 @@ const LearnPageContent: React.FC = () => {
    * 处理卡片更新
    */
   const handleCardsUpdate = () => {
-    setCardManagerKey(prev => prev + 1);
+    // CardManager 应该通过内部状态管理自动更新
+    // 不再强制重新挂载整个组件
+    console.log('🔄 卡片更新事件触发');
   };
 
   if (isLoading) {
