@@ -31,9 +31,9 @@ import {
   updateSessionMessages,
   updateSessionCurrentChapter,
   getAPIConfig,
-  markChapterCompleted,
-  addLearningCard
+  markChapterCompleted
 } from '../../src/utils/storageAdapter';
+import { addLearningCard } from '../../src/utils/storage';
 import { sendChatMessage, summarizeCardTitle, purifyCardContent, fixExistingOutline } from '../../src/utils/aiService';
 
 const LearnPageContent: React.FC = () => {
@@ -73,14 +73,14 @@ const LearnPageContent: React.FC = () => {
         if (!loadedSession) {
           console.error('❌ 学习会话不存在，sessionId:', sessionId);
           alert('学习会话不存在');
-          router.push('/');
+          router.push('/dashboard');
           return;
         }
 
         if (!loadedConfig) {
           console.error('❌ API配置丢失');
           alert('API配置丢失，请重新配置');
-          router.push('/');
+          router.push('/dashboard');
           return;
         }
 
@@ -576,84 +576,66 @@ const LearnPageContent: React.FC = () => {
       return;
     }
 
+    // 先标记消息为已收藏，防止重复点击
+    const tempUpdatedMessages = session.messages.map(m =>
+      m.id === messageId ? { ...m, isBookmarked: true } : m
+    );
+    setSession(prev => prev ? { ...prev, messages: tempUpdatedMessages } : null);
+
+    let cardTitle = '';
+    let cardContent = '';
+
     try {
-      // 首先提纯内容，然后基于提纯后的内容生成标题
+      // 尝试使用AI提纯内容和生成标题
       const contentResponse = await purifyCardContent(apiConfig, message.content, userNote);
       const purifiedContent = contentResponse.success ? contentResponse.data : message.content;
 
       console.log('原始对话内容:', message.content);
       console.log('提纯后内容:', purifiedContent);
 
-      // 基于提纯后的内容生成标题（更准确）
+      // 基于提纯后的内容生成标题
       const titleResponse = await summarizeCardTitle(apiConfig, purifiedContent);
-      const cardTitle = titleResponse.success ? titleResponse.data : purifiedContent.substring(0, 12);
+      cardTitle = titleResponse.success ? titleResponse.data : purifiedContent.substring(0, 12);
+      cardContent = purifiedContent;
 
-      // 创建卡片
-      const card: LearningCard = {
-        id: generateCardId(),
-        title: cardTitle,
-        content: purifiedContent, // 使用提纯后的内容
-        userNote, // 用户感受会在purifyCardContent中处理
-        type,
-        tags: [],
-        createdAt: Date.now(),
-        nextReviewAt: Date.now() + (1 * 60 * 1000), // 1分钟后复习（测试用）
-        reviewCount: 0,
-        difficulty: 3,
-        sessionId: session.id,
-        messageId: message.id,
-        chapterId: session.currentChapter,
-      };
-
-      // 保存卡片
-      const success = await addLearningCard(session.id, card);
-      if (success) {
-        // 更新消息的收藏状态
-        const updatedMessages = session.messages.map(m =>
-          m.id === messageId 
-            ? { ...m, isBookmarked: true, cardId: card.id }
-            : m
-        );
-        
-        setSession(prev => prev ? { ...prev, messages: updatedMessages } : null);
-        updateSessionMessages(session.id, updatedMessages);
-        
-        // 刷新卡片管理器
-        setCardManagerKey(prev => prev + 1);
-      }
     } catch (error) {
-      console.error('创建卡片失败:', error);
+      console.error('AI处理失败，使用备用方案:', error);
       
-      // 如果AI调用失败，使用简化处理的备用方案
-      const fallbackTitle = message.content.substring(0, 12);
+      // AI调用失败时的备用方案
+      cardTitle = message.content.substring(0, 12);
       
       // 简单的文本清理作为备用
-      const fallbackContent = message.content
+      cardContent = message.content
         .replace(/[😊😄😆🤔💡👍📚✨🎯🚀🔧🎨]/g, '') // 移除表情符号
         .replace(/你好[！!]*\s*/g, '')
         .replace(/我们[来去]?[学习讲解分析探讨]*\s*/g, '')
         .replace(/你觉得.*?[？?]/g, '')
         .replace(/明白了吗[？?]/g, '')
         .trim();
-      
-      const card: LearningCard = {
-        id: generateCardId(),
-        title: fallbackTitle,
-        content: fallbackContent + (userNote ? `\n\n学习感受：${userNote}` : ''),
-        userNote,
-        type,
-        tags: [],
-        createdAt: Date.now(),
-        nextReviewAt: Date.now() + (1 * 60 * 1000),
-        reviewCount: 0,
-        difficulty: 3,
-        sessionId: session.id,
-        messageId: message.id,
-        chapterId: session.currentChapter,
-      };
+    }
 
-      const success = await addLearningCard(session.id, card);
+    // 无论AI是否成功，都只创建一张卡片
+    const card: LearningCard = {
+      id: generateCardId(),
+      title: cardTitle,
+      content: cardContent + (userNote ? `\n\n学习感受：${userNote}` : ''),
+      userNote,
+      type,
+      tags: [],
+      createdAt: Date.now(),
+      nextReviewAt: Date.now() + (1 * 60 * 1000), // 1分钟后复习（测试用）
+      reviewCount: 0,
+      difficulty: 3,
+      sessionId: session.id,
+      messageId: message.id,
+      chapterId: session.currentChapter,
+    };
+
+    try {
+      // 保存卡片
+      const success = addLearningCard(session.id, card);
       if (success) {
+        // 更新消息的收藏状态，添加卡片ID
         const updatedMessages = session.messages.map(m =>
           m.id === messageId 
             ? { ...m, isBookmarked: true, cardId: card.id }
@@ -662,15 +644,34 @@ const LearnPageContent: React.FC = () => {
         
         setSession(prev => prev ? { ...prev, messages: updatedMessages } : null);
         updateSessionMessages(session.id, updatedMessages);
+        
+        // 刷新卡片管理器 - 双重确保
+        setCardManagerKey(prev => prev + 1);
+        handleCardsUpdate();
+        
+        console.log('✅ 卡片创建成功:', card.id);
+      } else {
+        throw new Error('保存卡片失败');
       }
+    } catch (saveError) {
+      console.error('保存卡片失败:', saveError);
+      
+      // 保存失败时，恢复消息的收藏状态
+      const revertedMessages = session.messages.map(m =>
+        m.id === messageId ? { ...m, isBookmarked: false } : m
+      );
+      setSession(prev => prev ? { ...prev, messages: revertedMessages } : null);
+      
+      // 可以在这里添加用户提示
+      alert('收藏失败，请重试');
     }
   };
 
   /**
-   * 返回首页
+   * 返回仪表板页面
    */
   const handleGoBack = () => {
-    router.push('/');
+    router.push('/dashboard');
   };
 
   /**
@@ -710,9 +711,9 @@ const LearnPageContent: React.FC = () => {
    * 处理卡片更新
    */
   const handleCardsUpdate = () => {
-    // CardManager 应该通过内部状态管理自动更新
-    // 不再强制重新挂载整个组件
-    console.log('🔄 卡片更新事件触发');
+    // 强制重新挂载CardManager组件以确保显示最新数据
+    setCardManagerKey(prev => prev + 1);
+    console.log('🔄 卡片更新事件触发，强制刷新CardManager');
   };
 
   if (isLoading) {

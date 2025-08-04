@@ -121,11 +121,16 @@ const CardManager: React.FC<CardManagerProps> = ({
    * 加载卡片数据
    */
   const loadCards = () => {
-    const allCards = getSessionCards(sessionId);
-    const needReview = getCardsForReview(sessionId);
-    
-    setCards(allCards);
-    setReviewCards(needReview);
+    try {
+      const allCards = getSessionCards(sessionId);
+      const needReview = getCardsForReview(sessionId);
+      
+      setCards(allCards);
+      setReviewCards(needReview);
+      console.log('🔄 CardManager加载卡片数据:', { sessionId, 卡片数量: allCards.length });
+    } catch (error) {
+      console.error('加载卡片数据失败:', error);
+    }
   };
 
   /**
@@ -178,7 +183,7 @@ const CardManager: React.FC<CardManagerProps> = ({
   useEffect(() => {
     const interval = setInterval(() => {
       loadCards();
-    }, 2000); // 每2秒检查一次卡片更新
+    }, 1000); // 每1秒检查一次卡片更新，确保及时显示新收藏的卡片
 
     return () => clearInterval(interval);
   }, [sessionId]);
