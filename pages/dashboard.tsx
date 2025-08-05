@@ -14,6 +14,8 @@ import Button from '../src/components/ui/Button';
 import Card from '../src/components/ui/Card';
 import APIConfigModal from '../src/components/APIConfigModal';
 import SessionHistoryList from '../src/components/SessionHistoryList';
+import SmartSyncControl from '../src/components/SmartSyncControl';
+import DataLifecycleManager from '../src/components/DataLifecycleManager';
 import { APIConfig, LearningSession } from '../src/types';
 import { 
   getAllSessions, 
@@ -147,6 +149,9 @@ const DashboardPage: React.FC = () => {
 
             {/* 操作按钮 */}
             <div className="flex items-center gap-3">
+              {/* 紧凑同步状态 */}
+              <SmartSyncControl compact={true} showDetails={false} />
+              
               <Button
                 variant="outline"
                 size="sm"
@@ -178,6 +183,11 @@ const DashboardPage: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* 智能同步控制 */}
+        <div className="mb-8">
+          <SmartSyncControl compact={false} showDetails={true} />
+        </div>
+
         {/* 欢迎区域 */}
         <div className="mb-12">
           <div className="text-center max-w-3xl mx-auto">
@@ -251,6 +261,11 @@ const DashboardPage: React.FC = () => {
             onEnterSession={handleEnterSession}
             onDeleteSession={handleDeleteSession}
           />
+        </div>
+
+        {/* 数据生命周期管理 */}
+        <div className="mb-8">
+          <DataLifecycleManager />
         </div>
 
         {/* 配置状态提示 */}

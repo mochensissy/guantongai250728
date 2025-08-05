@@ -58,15 +58,38 @@ const UploadPageContent: React.FC = () => {
    */
   useEffect(() => {
     const loadConfig = async () => {
-      const config = await storageAdapter.getAPIConfig();
-      if (!config) {
+      console.log('开始加载API配置...');
+      try {
+        // 使用同步方法避免async/await问题
+        const config = storageAdapter.getAPIConfig_sync();
+        console.log('API配置结果:', config);
+        
+        if (!config) {
+          console.log('未找到API配置，跳转到首页');
+          router.push('/');
+          return;
+        }
+        setApiConfig(config);
+        setIsInitialLoading(false);
+        console.log('API配置加载完成');
+      } catch (error) {
+        console.error('加载API配置失败:', error);
+        // 发生错误时也跳转到首页
         router.push('/');
-        return;
       }
-      setApiConfig(config);
-      setIsInitialLoading(false);
     };
-    loadConfig();
+    
+    // 设置超时机制，防止页面卡死
+    const timeout = setTimeout(() => {
+      console.log('加载API配置超时，跳转到首页');
+      router.push('/');
+    }, 5000);
+    
+    loadConfig().then(() => {
+      clearTimeout(timeout);
+    });
+    
+    return () => clearTimeout(timeout);
   }, [router]);
 
   /**
