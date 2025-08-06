@@ -32,15 +32,32 @@ class StorageAdapter {
    * 保存学习会话
    */
   async saveSession(session: LearningSession): Promise<boolean> {
+    console.log('🔧 StorageAdapter.saveSession 开始:', {
+      sessionId: session.id,
+      title: session.title,
+      learningLevel: session.learningLevel
+    });
+    
     try {
-      if (await isUserLoggedIn()) {
-        return await hybridStorage.saveSession(session)
+      const isLoggedIn = await isUserLoggedIn();
+      console.log('🔧 用户登录状态:', isLoggedIn);
+      
+      if (isLoggedIn) {
+        console.log('🔧 使用混合存储保存会话');
+        const result = await hybridStorage.saveSession(session);
+        console.log('🔧 混合存储保存结果:', result);
+        return result;
       } else {
-        return localStorage.saveSession(session)
+        console.log('🔧 使用本地存储保存会话');
+        const result = localStorage.saveSession(session);
+        console.log('🔧 本地存储保存结果:', result);
+        return result;
       }
     } catch (error) {
-      console.error('保存会话失败，降级到本地存储:', error)
-      return localStorage.saveSession(session)
+      console.error('🔧 保存会话失败，降级到本地存储:', error)
+      const result = localStorage.saveSession(session);
+      console.log('🔧 降级本地存储保存结果:', result);
+      return result;
     }
   }
 

@@ -208,80 +208,136 @@ const analyzeDocumentStructure = (content: string, wordCount: number) => {
  */
 const fixCommonJsonErrors = (jsonString: string): string => {
   console.log('🔧 开始JSON修复，原始长度:', jsonString.length);
-  console.log('🔧 原始内容前800字符:', jsonString.substring(0, 800));
-  console.log('🔧 原始内容后800字符:', jsonString.substring(jsonString.length - 800));
+  console.log('🔧 原始内容前500字符:', jsonString.substring(0, 500));
+  console.log('🔧 原始内容后500字符:', jsonString.substring(jsonString.length - 500));
   
   let fixed = jsonString;
   let fixCount = 0;
   
-  // 1. 最常见问题：在数组中，对象之间缺少逗号
-  // 匹配 } 后面直接跟 { 的情况（可能有空白字符或换行）
+  // 1. 最严重问题：在数组中，对象之间缺少逗号
+  // 先处理跨行的情况：} 后面换行跟 {
   fixed = fixed.replace(/}\s*\n\s*{/g, () => {
     fixCount++;
     return '},\n{';
   });
   
-  // 2. 同一行的对象之间缺少逗号
+  // 2. 处理同一行的对象之间缺少逗号
   fixed = fixed.replace(/}\s*{/g, () => {
     fixCount++;
     return '}, {';
   });
   
-  // 3. 修复多余的逗号（JSON末尾的逗号）
+  // 3. 处理对象结束后直接跟属性名的情况（说明是数组中的下一个对象）
+  fixed = fixed.replace(/}\s*\n\s*"/g, '},\n"');
+  
+  // 4. 修复多余的逗号（JSON末尾的逗号）
   fixed = fixed.replace(/,(\s*[}\]])/g, '$1');
   
-  // 4. 特殊情况：针对特定错误位置的修复
-  if (jsonString.length > 4700) {
-    // 检查位置4714附近的内容（从错误信息得知）
-    const startPos = Math.max(0, 4700);
-    const endPos = Math.min(jsonString.length, 4800);
-    const errorArea = jsonString.substring(startPos, endPos);
-    console.log('🔧 错误位置附近内容:', errorArea);
-    
-    // 在错误位置附近查找并修复常见问题
-    const beforeError = jsonString.substring(0, startPos);
-    const afterError = jsonString.substring(endPos);
-    
-    // 检查是否是对象间缺少逗号的问题
-    let fixedErrorArea = errorArea;
-    
-    // 修复 } 后面直接跟 { 的情况
-    fixedErrorArea = fixedErrorArea.replace(/}\s*\n\s*{/g, '},\n{');
-    
-    // 修复 } 后面直接跟 " 的情况（属性定义，说明是新对象开始）
-    fixedErrorArea = fixedErrorArea.replace(/}\s*\n\s*"/g, '},\n"');
-    
-    // 重新组合JSON
-    if (fixedErrorArea !== errorArea) {
-      fixed = beforeError + fixedErrorArea + afterError;
-      fixCount++;
-      console.log('🔧 修复了错误位置附近的语法问题');
-    }
-  }
-  
-  // 5. 针对特定错误位置的修复
-  // 查找所有 } 的位置，检查后面是否应该有逗号
+  // 5. 更精细的行级修复
   const lines = fixed.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (line === '}' && i < lines.length - 1) {
-      const nextLine = lines[i + 1].trim();
-      // 如果下一行以 { 开头，说明需要逗号
-      if (nextLine.startsWith('{')) {
-        lines[i] = lines[i].replace('}', '},');
-        fixCount++;
-        console.log(`🔧 在第 ${i + 1} 行修复了缺少的逗号`);
+  for (let i = 0; i < lines.length - 1; i++) {
+    const currentLine = lines[i].trim();
+    const nextLine = lines[i + 1].trim();
+    
+    // 如果当前行以 } 结尾，下一行以 { 或 " 开头，则需要逗号
+    if (currentLine.endsWith('}')) {
+      if (nextLine.startsWith('{') || nextLine.startsWith('"')) {
+        // 检查是否已经有逗号
+        if (!currentLine.endsWith('},')) {
+          lines[i] = lines[i].replace(/}\s*$/, '},');
+          fixCount++;
+          console.log(`🔧 在第 ${i + 1} 行添加缺少的逗号`);
+        }
       }
     }
   }
   fixed = lines.join('\n');
   
+  // 6. 处理特殊的嵌套JSON结构问题
+  // 查找形如 }{"title": 的模式（对象间直接相邻）
+  fixed = fixed.replace(/}\s*\{\s*"/g, () => {
+    fixCount++;
+    return '}, {"';
+  });
+  
+  // 7. 针对数组中最后一个元素的处理
+  // 确保数组正确闭合
+  const arrayMatch = fixed.match(/\[\s*[\s\S]*\]/);
+  if (arrayMatch) {
+    let arrayContent = arrayMatch[0];
+    // 移除数组内最后的多余逗号
+    arrayContent = arrayContent.replace(/,(\s*\])/g, '$1');
+    fixed = fixed.replace(arrayMatch[0], arrayContent);
+  }
+  
   console.log('🔧 总共修复了', fixCount, '个问题');
   console.log('🔧 修复后长度:', fixed.length);
-  console.log('🔧 修复后内容前800字符:', fixed.substring(0, 800));
-  console.log('🔧 修复后内容后800字符:', fixed.substring(fixed.length - 800));
+  
+  if (fixCount > 0) {
+    console.log('🔧 修复后内容前500字符:', fixed.substring(0, 500));
+    console.log('🔧 修复后内容后500字符:', fixed.substring(fixed.length - 500));
+  }
   
   return fixed;
+};
+
+/**
+ * 创建回退大纲结构
+ * 当JSON解析完全失败时，从AI返回的文本中提取关键信息
+ */
+const createFallbackOutline = (content: string, documentTitle?: string) => {
+  console.log('🚨 使用回退策略创建基础大纲');
+  
+  // 尝试从内容中提取章节标题
+  const chapterPattern = /第\d+章[：:]\s*(.+?)(?:\n|$)/g;
+  const sectionPattern = /\d+\.\d+[：:]\s*(.+?)(?:\n|$)/g;
+  
+  const chapters: any[] = [];
+  const sections: any[] = [];
+  
+  let match;
+  let order = 1;
+  
+  // 提取章节
+  while ((match = chapterPattern.exec(content)) !== null) {
+    chapters.push({
+      title: `第${Math.ceil(order/2)}章 ${match[1].trim()}`,
+      order: order++,
+      type: 'chapter',
+      level: 1,
+      chapterNumber: Math.ceil(order/2)
+    });
+  }
+  
+  // 提取小节
+  while ((match = sectionPattern.exec(content)) !== null) {
+    const parentChapter = Math.ceil(order/2);
+    sections.push({
+      title: match[0].trim(),
+      order: order++,
+      type: 'section',
+      level: 2,
+      parentChapter,
+      estimatedMinutes: 10
+    });
+  }
+  
+  // 如果没有找到结构化内容，创建基础大纲
+  let outline = [...chapters, ...sections];
+  
+  if (outline.length === 0) {
+    console.log('🚨 未找到结构化内容，创建默认大纲');
+    outline = [
+      { title: '第1章 文档概述', order: 1, type: 'chapter', level: 1, chapterNumber: 1 },
+      { title: '1.1 主要内容', order: 2, type: 'section', level: 2, parentChapter: 1, estimatedMinutes: 15 },
+      { title: '1.2 重点总结', order: 3, type: 'section', level: 2, parentChapter: 1, estimatedMinutes: 10 }
+    ];
+  }
+  
+  return {
+    documentTitle: documentTitle || '文档大纲',
+    outline
+  };
 };
 
 /**
@@ -316,15 +372,38 @@ const fixJsonByErrorPosition = (jsonString: string, errorMessage: string): strin
     
     // 如果错误位置是 { 并且前面是 }，说明缺少逗号
     if (errorChar === '{' && position > 0) {
-      const beforeContext = jsonString.substring(Math.max(0, position - 20), position);
+      const beforeContext = jsonString.substring(Math.max(0, position - 50), position);
       if (beforeContext.includes('}')) {
         console.log('🎯 检测到对象间缺少逗号的问题');
-        // 在 } 和 { 之间插入逗号
-        fixed = jsonString.substring(0, position - beforeContext.length + beforeContext.lastIndexOf('}') + 1) + 
-                ',' + 
-                jsonString.substring(position - beforeContext.length + beforeContext.lastIndexOf('}') + 1);
-        console.log('🎯 在对象间插入了逗号');
-        return fixed;
+        // 找到最近的 } 位置
+        const lastBracePos = beforeContext.lastIndexOf('}');
+        if (lastBracePos !== -1) {
+          const actualBracePosition = position - beforeContext.length + lastBracePos;
+          // 在 } 后面插入逗号
+          fixed = jsonString.substring(0, actualBracePosition + 1) + 
+                  ',' + 
+                  jsonString.substring(actualBracePosition + 1);
+          console.log('🎯 在对象间插入了逗号');
+          return fixed;
+        }
+      }
+    }
+    
+    // 如果错误位置是 " 并且前面是 }，也说明缺少逗号
+    if (errorChar === '"' && position > 0) {
+      const beforeContext = jsonString.substring(Math.max(0, position - 50), position);
+      if (beforeContext.includes('}')) {
+        console.log('🎯 检测到对象结束后直接跟属性名，缺少逗号');
+        const lastBracePos = beforeContext.lastIndexOf('}');
+        if (lastBracePos !== -1) {
+          const actualBracePosition = position - beforeContext.length + lastBracePos;
+          // 在 } 后面插入逗号
+          fixed = jsonString.substring(0, actualBracePosition + 1) + 
+                  ',' + 
+                  jsonString.substring(actualBracePosition + 1);
+          console.log('🎯 在对象结束和属性名之间插入了逗号');
+          return fixed;
+        }
       }
     }
   }
@@ -1105,6 +1184,78 @@ const smartContentTruncate = (content: string, maxLength: number = 8000): string
   return `${beginning}\n\n[...文档中间部分...]\n\n${middle}\n\n[...文档后续部分...]\n\n${ending}`;
 };
 
+/**
+ * 超大文档分块处理策略
+ * 当文档过大时，将其分为多个部分分别处理，然后合并结果
+ */
+const processLargeDocumentInChunks = async (
+  config: APIConfig,
+  documentContent: string,
+  documentTitle?: string
+): Promise<GenerateOutlineResponse> => {
+  console.log('📚 开始分块处理超大文档:', {
+    contentLength: documentContent.length,
+    title: documentTitle
+  });
+
+  // 对于超大文档，采用更激进的截取策略
+  // 取开头20%、中间10%、结尾20%的内容进行处理
+  const totalLength = documentContent.length;
+  const headLength = Math.floor(totalLength * 0.2); // 20%
+  const middleLength = Math.floor(totalLength * 0.1); // 10%
+  const tailLength = Math.floor(totalLength * 0.2); // 20%
+  
+  const middleStart = Math.floor((totalLength - middleLength) / 2);
+  
+  const headContent = documentContent.substring(0, headLength);
+  const middleContent = documentContent.substring(middleStart, middleStart + middleLength);
+  const tailContent = documentContent.substring(totalLength - tailLength);
+  
+  // 组合代表性内容
+  const representativeContent = `${headContent}\n\n[...文档中间部分省略...]\n\n${middleContent}\n\n[...文档后续部分省略...]\n\n${tailContent}`;
+  
+  console.log('📚 使用代表性内容生成大纲:', {
+    originalLength: totalLength,
+    representativeLength: representativeContent.length,
+    compressionRatio: `${((representativeContent.length / totalLength) * 100).toFixed(1)}%`
+  });
+
+  try {
+    // 直接调用生成大纲，但使用更小的内容
+    const result = await generateOutline(config, representativeContent, documentTitle);
+    
+    if (result.success && result.outline) {
+      console.log('📚 超大文档分块处理成功，生成了', result.outline.length, '个大纲项');
+      return result;
+    } else {
+      throw new Error('代表性内容生成大纲失败');
+    }
+  } catch (error) {
+    console.error('📚 代表性内容处理失败，尝试极简版本:', error);
+    
+    // 如果还是失败，使用极简版本（仅开头和结尾各10%）
+    const extremeSimpleContent = `${documentContent.substring(0, Math.floor(totalLength * 0.1))}\n\n[...文档主体内容省略...]\n\n${documentContent.substring(totalLength - Math.floor(totalLength * 0.1))}`;
+    
+    console.log('📚 使用极简内容:', {
+      extremeLength: extremeSimpleContent.length,
+      ratio: `${((extremeSimpleContent.length / totalLength) * 100).toFixed(1)}%`
+    });
+    
+    try {
+      const extremeResult = await generateOutline(config, extremeSimpleContent, documentTitle);
+      return extremeResult;
+    } catch (finalError) {
+      console.error('📚 所有分块策略都失败了:', finalError);
+      return {
+        success: false,
+        outline: [],
+        documentTitle: documentTitle,
+        error: '文档过大，无法生成完整大纲。请尝试将文档分割为更小的部分。'
+      };
+    }
+  }
+};
+
 export const generateOutline = async (
   config: APIConfig,
   documentContent: string,
@@ -1117,6 +1268,12 @@ export const generateOutline = async (
     provider: config.provider,
     model: config.model
   });
+
+  // 对于超大文档（>80,000字符），使用分块处理策略
+  if (documentContent.length > 80000) {
+    console.log('📖 文档过大，切换到分块处理策略');
+    return await processLargeDocumentInChunks(config, documentContent, documentTitle);
+  }
   
   try {
     // 计算文档字数用于时间预估
@@ -1134,8 +1291,20 @@ export const generateOutline = async (
     });
 
     // 智能截取内容，避免超出AI token限制
-    // 对于超大文档，给予更多的token空间
-    const maxLengthForOutline = documentContent.length > 30000 ? 12000 : 8000;
+    // 根据文档大小动态调整截取策略 - 更激进的压缩
+    let maxLengthForOutline: number;
+    if (documentContent.length > 100000) {
+      maxLengthForOutline = 3000; // 超大文档，极度压缩
+    } else if (documentContent.length > 50000) {
+      maxLengthForOutline = 5000; // 大文档，大幅压缩
+    } else if (documentContent.length > 30000) {
+      maxLengthForOutline = 8000; // 中等文档，适度压缩
+    } else if (documentContent.length > 15000) {
+      maxLengthForOutline = 10000; // 较大文档
+    } else {
+      maxLengthForOutline = Math.min(documentContent.length, 12000); // 小文档
+    }
+    
     const truncatedContent = smartContentTruncate(documentContent, maxLengthForOutline);
     const isContentTruncated = truncatedContent.length < documentContent.length;
     
@@ -1234,9 +1403,10 @@ ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文�
   ]
 }`}`;
 
-    const response = await makeAPIRequest(config, [
+    // 使用重试机制调用API，提高大文档处理成功率
+    const response = await makeAPIRequestWithRetry(config, [
       { role: 'user', content: prompt }
-    ]);
+    ], 3, 2000);
 
     // 解析AI返回的JSON
     const content = response.content || '';
@@ -1273,9 +1443,21 @@ ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文�
             console.log('方法1: 精准修复成功，解析后的响应对象键:', Object.keys(parsedResponse));
           } catch (secondError) {
             console.log('精准修复失败，尝试通用修复...');
-            const generalFixedJson = fixCommonJsonErrors(jsonMatch[0]);
-            parsedResponse = JSON.parse(generalFixedJson);
-            console.log('方法1: 通用修复成功，解析后的响应对象键:', Object.keys(parsedResponse));
+            try {
+              const generalFixedJson = fixCommonJsonErrors(jsonMatch[0]);
+              parsedResponse = JSON.parse(generalFixedJson);
+              console.log('方法1: 通用修复成功，解析后的响应对象键:', Object.keys(parsedResponse));
+            } catch (thirdError) {
+              console.error('所有JSON修复方法都失败，使用错误恢复策略');
+              // 作为最后手段，尝试提取部分内容创建基本的outline结构
+              try {
+                const fallbackOutline = createFallbackOutline(content, documentTitle);
+                parsedResponse = fallbackOutline;
+                console.log('✅ 使用回退策略成功创建基础大纲');
+              } catch (fallbackError) {
+                throw new Error(`JSON解析完全失败: ${thirdError instanceof Error ? thirdError.message : '未知错误'}`);
+              }
+            }
           }
         }
       } else {
@@ -1288,9 +1470,14 @@ ${!documentTitle || documentTitle === '未知文档' || documentTitle === '文�
             console.log('方法2: 解析后的响应对象:', parsedResponse);
           } catch (jsonError) {
             console.log('方法2失败，尝试修复JSON语法错误...');
-            const fixedJson = fixCommonJsonErrors(codeBlockMatch[1]);
-            parsedResponse = JSON.parse(fixedJson);
-            console.log('方法2: JSON修复成功');
+            try {
+              const fixedJson = fixCommonJsonErrors(codeBlockMatch[1]);
+              parsedResponse = JSON.parse(fixedJson);
+              console.log('方法2: JSON修复成功');
+            } catch (fixError) {
+              console.error('方法2: JSON修复失败:', fixError);
+              throw new Error(`代码块JSON解析失败: ${fixError instanceof Error ? fixError.message : '未知错误'}`);
+            }
           }
         } else {
           // 方法3: 尝试直接解析整个内容
@@ -1826,6 +2013,71 @@ ${isContentTruncated ? '注意：学习材料内容较长，已进行智能截�
 };
 
 /**
+ * 带重试机制的API请求函数
+ * 处理大文档解析时的网络超时和服务错误
+ */
+const makeAPIRequestWithRetry = async (
+  config: APIConfig,
+  messages: Array<{ role: string; content: string }>,
+  maxRetries: number = 3,
+  retryDelay: number = 2000
+): Promise<{ content: string }> => {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`📡 API请求尝试 ${attempt}/${maxRetries}`, {
+        provider: config.provider,
+        model: config.model,
+        messageLength: messages[0]?.content?.length || 0
+      });
+      
+      const result = await makeAPIRequest(config, messages);
+      console.log(`✅ API请求第${attempt}次尝试成功`);
+      return result;
+      
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`⚠️ API请求第${attempt}次尝试失败:`, {
+        attempt,
+        maxRetries,
+        error: lastError.message,
+        provider: config.provider
+      });
+      
+      // 如果是最后一次尝试，直接抛出错误
+      if (attempt === maxRetries) {
+        break;
+      }
+      
+      // 检查错误类型，决定是否重试
+      const errorMessage = lastError.message.toLowerCase();
+      const shouldRetry = 
+        errorMessage.includes('503') ||  // 服务不可用
+        errorMessage.includes('502') ||  // 网关错误
+        errorMessage.includes('504') ||  // 网关超时
+        errorMessage.includes('429') ||  // 请求过多
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('network') ||
+        errorMessage.includes('fetch');
+      
+      if (!shouldRetry) {
+        console.log(`❌ 错误类型不适合重试，直接失败: ${lastError.message}`);
+        break;
+      }
+      
+      // 计算延迟时间（指数退避）
+      const delay = retryDelay * Math.pow(2, attempt - 1);
+      console.log(`⏳ 等待 ${delay}ms 后重试...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  // 所有重试都失败了
+  throw new Error(`API请求失败，已重试${maxRetries}次。最后错误: ${lastError?.message || '未知错误'}`);
+};
+
+/**
  * 通用API请求处理函数
  * 处理不同AI服务商的API调用差异
  */
@@ -1924,7 +2176,7 @@ const makeAPIRequest = async (
       break;
   }
 
-  // 发送请求
+    // 发送请求
   const finalUrl = url;
 
   console.log('🚀 发送AI请求:', {
@@ -1939,11 +2191,28 @@ const makeAPIRequest = async (
     }
   });
 
-  const response = await fetch(finalUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(requestBody),
-  });
+  // 添加超时控制 - 大文档处理需要更长时间
+  const timeoutMs = 60000; // 60秒超时
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(finalUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`请求超时 (${timeoutMs/1000}秒)，请尝试使用更短的文档或分段上传`);
+    }
+    throw error;
+  }
 
   console.log('📥 AI响应状态:', {
     status: response.status,

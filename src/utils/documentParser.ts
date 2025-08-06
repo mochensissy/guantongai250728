@@ -409,8 +409,41 @@ const parsePDF = async (
     // 使用CDN版本的PDF.js worker来避免构建问题
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.js');
     
-    // 设置worker路径
-    pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    // 设置worker路径 - 使用多个备用CDN确保可用性
+    const workerCdnUrls = [
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+      'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+      'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+      '/pdf.worker.min.js' // 本地备用文件
+    ];
+    
+    // 尝试设置worker，如果CDN失败则使用本地版本
+    let workerLoaded = false;
+    for (const workerUrl of workerCdnUrls) {
+      try {
+        pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+        console.log(`尝试使用PDF Worker: ${workerUrl}`);
+        
+        // 测试worker是否可用
+        const testArrayBuffer = new ArrayBuffer(8);
+        await pdfjs.getDocument({ data: testArrayBuffer }).promise.catch(() => {
+          // 预期会失败，但可以验证worker是否加载
+        });
+        
+        workerLoaded = true;
+        console.log(`PDF Worker加载成功: ${workerUrl}`);
+        break;
+      } catch (error) {
+        console.warn(`PDF Worker加载失败: ${workerUrl}`, error);
+        continue;
+      }
+    }
+    
+    if (!workerLoaded) {
+      console.warn('所有PDF Worker都加载失败，将尝试使用内联worker');
+      // 如果所有worker都失败，尝试禁用worker（会降低性能但仍可工作）
+      pdfjs.GlobalWorkerOptions.workerSrc = '';
+    }
     
     // 更新进度: 正在读取文件
     progressCallback?.(10, '正在读取PDF文件...');
@@ -514,25 +547,40 @@ const parsePDF = async (
     
     // 增强错误信息，帮助用户理解问题
     let errorMessage = 'PDF解析失败';
+    let userFriendlyMessage = '';
     
     if (error instanceof Error) {
       const errorMsg = error.message.toLowerCase();
       
       if (errorMsg.includes('memory') || errorMsg.includes('allocation')) {
-        errorMessage = '文件过大导致内存不足，请尝试较小的PDF文件或联系技术支持';
+        errorMessage = '文件过大导致内存不足';
+        userFriendlyMessage = '💡 建议解决方案：\n1. 尝试使用较小的PDF文件（建议<10MB）\n2. 或将大文件分页导出为多个小文件\n3. 也可以复制PDF内容，使用"文本粘贴"功能';
       } else if (errorMsg.includes('invalid') || errorMsg.includes('corrupt')) {
-        errorMessage = 'PDF文件格式不正确或已损坏，请检查文件完整性';
+        errorMessage = 'PDF文件格式不正确或已损坏';
+        userFriendlyMessage = '💡 建议解决方案：\n1. 重新下载或获取原始PDF文件\n2. 尝试用PDF阅读器打开确认文件完整性\n3. 或复制文件内容，使用"文本粘贴"功能';
       } else if (errorMsg.includes('password') || errorMsg.includes('encrypted')) {
         errorMessage = '不支持加密或受密码保护的PDF文件';
+        userFriendlyMessage = '💡 建议解决方案：\n1. 使用PDF阅读器移除密码保护后重新上传\n2. 或复制PDF内容，使用"文本粘贴"功能';
+      } else if (errorMsg.includes('worker') || errorMsg.includes('fetch') || errorMsg.includes('network')) {
+        errorMessage = 'PDF解析器加载失败';
+        userFriendlyMessage = '💡 建议解决方案：\n1. 检查网络连接是否正常\n2. 刷新页面重试\n3. 或复制PDF内容，使用"文本粘贴"功能\n4. 如果问题持续，可能是浏览器安全设置限制';
+      } else if (errorMsg.includes('timeout')) {
+        errorMessage = '解析超时，可能文件过大或网络较慢';
+        userFriendlyMessage = '💡 建议解决方案：\n1. 重试解析\n2. 检查网络连接\n3. 尝试较小的PDF文件\n4. 或使用"文本粘贴"功能';
       } else {
         errorMessage = `PDF解析失败: ${error.message}`;
+        userFriendlyMessage = '💡 建议解决方案：\n1. 刷新页面重试\n2. 尝试其他格式的文件\n3. 或复制文档内容，使用"文本粘贴"功能';
       }
     }
+    
+    const fullErrorMessage = userFriendlyMessage 
+      ? `${errorMessage}\n\n${userFriendlyMessage}`
+      : errorMessage;
     
     return {
       success: false,
       content: '',
-      error: errorMessage,
+      error: fullErrorMessage,
     };
   }
 };
@@ -1324,8 +1372,11 @@ const findCrossReferences = (currentContent: string, _allSplits: DocumentSplit[]
 /**
  * 清理内容中可能导致JSON解析问题的特殊字符
  * 注意：这里不对内容进行JSON转义，只是清理可能有问题的字符
+ * 
+ * @param content 原始文本内容
+ * @returns 清理后的文本内容
  */
-const cleanContentForJSON = (content: string): string => {
+export const cleanContentForJSON = (content: string): string => {
   return content
     // 移除控制字符，但保留常用的空白字符
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '')

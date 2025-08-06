@@ -111,20 +111,34 @@ export class HybridStorageService {
    * 保存学习会话
    */
   async saveSession(session: LearningSession): Promise<boolean> {
+    console.log('🏪 HybridStorage.saveSession 开始:', {
+      sessionId: session.id,
+      title: session.title
+    });
+    
     try {
       // 总是先保存到本地
-      const localSuccess = localStorageService.saveSession(session)
+      console.log('🏪 开始本地保存');
+      const localSuccess = localStorageService.saveSession(session);
+      console.log('🏪 本地保存结果:', localSuccess);
       
       if (!localSuccess) {
         throw new Error('本地保存失败')
       }
 
       // 尝试同步到云端
-      await this.syncToCloud('save_session', session)
+      console.log('🏪 开始云端同步');
+      try {
+        await this.syncToCloud('save_session', session);
+        console.log('🏪 云端同步完成');
+      } catch (syncError) {
+        console.warn('🏪 云端同步失败，但本地保存成功:', syncError);
+        // 云端同步失败不影响整体操作，因为本地已保存成功
+      }
 
       return true
     } catch (error) {
-      console.error('保存会话失败:', error)
+      console.error('🏪 保存会话失败:', error)
       return false
     }
   }

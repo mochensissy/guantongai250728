@@ -86,20 +86,20 @@ export default function SmartSyncControl({ compact = false, showDetails = true }
   }
   
   /**
-   * 执行快速同步
+   * 执行同步（统一同步所有重要数据）
    */
-  const handleQuickSync = async () => {
+  const handleSync = async () => {
     if (!user || isSyncing) return
     
     setIsSyncing(true)
     setSyncResult(null)
     
     try {
-               // 执行快速同步，减少动画时间
-         const [result] = await Promise.all([
-           smartSyncManager.executeQuickSync(),
-           new Promise(resolve => setTimeout(resolve, 800)) // 减少到0.8秒同步动画
-         ])
+      // 执行完整同步，包含所有重要数据
+      const [result] = await Promise.all([
+        smartSyncManager.executeFullSync(),
+        new Promise(resolve => setTimeout(resolve, 1000)) // 1秒同步动画
+      ])
       
       setSyncResult(result)
       
@@ -110,50 +110,7 @@ export default function SmartSyncControl({ compact = false, showDetails = true }
         window.dispatchEvent(new CustomEvent('syncComplete'))
       }
     } catch (error) {
-      console.error('快速同步失败:', error)
-      setSyncResult({
-        success: false,
-        syncedItems: 0,
-        failedItems: 0,
-        errors: [error.message],
-        duration: 0,
-        savedSize: 0
-      })
-    } finally {
-      setIsSyncing(false)
-    }
-  }
-  
-  /**
-   * 执行完整同步
-   */
-  const handleFullSync = async () => {
-    if (!user || isSyncing) return
-    
-    if (!confirm('完整同步会上传更多数据到云端，确定继续吗？')) {
-      return
-    }
-    
-    setIsSyncing(true)
-    setSyncResult(null)
-    
-    try {
-      // 完整同步需要更长时间
-               const [result] = await Promise.all([
-           smartSyncManager.executeFullSync(),
-           new Promise(resolve => setTimeout(resolve, 1200)) // 减少到1.2秒同步动画
-         ])
-      
-      setSyncResult(result)
-      
-      if (result.success) {
-        smartSyncManager.updateLastSyncTime()
-        await loadSyncData()
-        // 触发全局同步完成事件，让其他组件实例也更新
-        window.dispatchEvent(new CustomEvent('syncComplete'))
-      }
-    } catch (error) {
-      console.error('完整同步失败:', error)
+      console.error('同步失败:', error)
       setSyncResult({
         success: false,
         syncedItems: 0,
@@ -210,7 +167,7 @@ export default function SmartSyncControl({ compact = false, showDetails = true }
     if (!user) return '未登录'
     if (isSyncing) return '正在同步数据...'
     if (syncStats?.hasUnsyncedChanges) return `${syncStats.pendingItems} 项数据待同步`
-    return '所有数据已同步'
+    return '已完成同步'
   }
   
   /**
@@ -249,7 +206,7 @@ export default function SmartSyncControl({ compact = false, showDetails = true }
           <Button
             size="sm"
             variant="outline"
-            onClick={handleQuickSync}
+            onClick={handleSync}
             disabled={isSyncing}
             className="text-xs"
           >
@@ -338,32 +295,18 @@ export default function SmartSyncControl({ compact = false, showDetails = true }
       
       {/* 同步操作按钮 */}
       <div className="p-4">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <Button
-            onClick={handleQuickSync}
+            onClick={handleSync}
             disabled={isSyncing || !syncStats?.hasUnsyncedChanges}
             className="flex items-center justify-center space-x-2"
           >
             {isSyncing ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
             ) : (
-              <Zap className="w-4 h-4" />
+              <Cloud className="w-4 h-4" />
             )}
-            <span>{isSyncing ? '同步中...' : '快速同步'}</span>
-          </Button>
-          
-          <Button
-            variant="outline"
-            onClick={handleFullSync}
-            disabled={isSyncing || !syncStats?.hasUnsyncedChanges}
-            className="flex items-center justify-center space-x-2"
-          >
-            {isSyncing ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <Archive className="w-4 h-4" />
-            )}
-            <span>{isSyncing ? '同步中...' : '完整同步'}</span>
+            <span>{isSyncing ? '同步中...' : '同步到云端'}</span>
           </Button>
           
           <Button

@@ -42,12 +42,20 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     message: string;
     type: 'info' | 'success' | 'error';
     progress?: number; // 新增进度字段
+    canRetry?: boolean; // 新增重试字段
   }>({
     isProcessing: false,
     message: '',
     type: 'info',
     progress: 0,
+    canRetry: false,
   });
+
+  // 重试相关状态
+  const [lastUploadData, setLastUploadData] = useState<{
+    type: 'file' | 'url' | 'text';
+    data: File | string;
+  } | null>(null);
 
   // 文档拆分相关状态
   const [showSplitConfirm, setShowSplitConfirm] = useState(false);
@@ -72,6 +80,17 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     'text/plain',
   ];
 
+  // 文件类型对应的友好名称
+  const fileTypeNames = {
+    '.pdf': 'PDF文档',
+    '.doc': 'Word文档',
+    '.docx': 'Word文档',
+    '.ppt': 'PowerPoint演示文稿',
+    '.pptx': 'PowerPoint演示文稿',
+    '.md': 'Markdown文档',
+    '.txt': '文本文件'
+  };
+
   /**
    * 更新处理状态
    */
@@ -79,20 +98,26 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     isProcessing: boolean, 
     message: string, 
     type: 'info' | 'success' | 'error' = 'info',
-    progress?: number
+    progress?: number,
+    canRetry: boolean = false
   ) => {
-    setProcessingStatus({ isProcessing, message, type, progress });
+    setProcessingStatus({ isProcessing, message, type, progress, canRetry });
   };
 
   /**
    * 验证文件类型
    */
-  const validateFileType = (file: File): boolean => {
+  const validateFileType = (file: File): { valid: boolean; detectedType?: string } => {
     const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
     const mimeTypeValid = supportedMimeTypes.includes(file.type);
     const extensionValid = supportedFileTypes.includes(fileExtension);
     
-    return mimeTypeValid || extensionValid;
+    const detectedType = fileTypeNames[fileExtension as keyof typeof fileTypeNames] || '未知类型';
+    
+    return {
+      valid: mimeTypeValid || extensionValid,
+      detectedType
+    };
   };
 
   /**
@@ -104,10 +129,11 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     const file = files[0];
 
     // 验证文件类型
-    if (!validateFileType(file)) {
+    const validation = validateFileType(file);
+    if (!validation.valid) {
       updateProcessingStatus(
         false, 
-        `不支持的文件类型。当前支持的格式：${supportedFileTypes.join(', ')}`, 
+        `不支持的文件类型（检测到：${validation.detectedType}）\n\n💡 支持的文件格式：\n• PDF文档 (.pdf)\n• Word文档 (.doc, .docx)\n• PowerPoint演示文稿 (.ppt, .pptx)\n• Markdown文档 (.md)\n• 文本文件 (.txt)\n\n建议：如果是其他格式，可以复制内容后使用"文本粘贴"功能`, 
         'error'
       );
       return;
@@ -116,10 +142,18 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     // 验证文件大小（限制为20MB）
     const maxSize = 20 * 1024 * 1024; // 20MB
     if (file.size > maxSize) {
-      updateProcessingStatus(false, '文件大小不能超过20MB', 'error');
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      updateProcessingStatus(
+        false, 
+        `文件过大（${fileSizeMB}MB，限制20MB）\n\n💡 建议解决方案：\n1. 压缩PDF文件大小\n2. 将大文档分页导出为多个小文件\n3. 或复制文档内容，使用"文本粘贴"功能`, 
+        'error'
+      );
       return;
     }
 
+    // 保存上传数据用于重试
+    setLastUploadData({ type: 'file', data: file });
+    
     updateProcessingStatus(true, '正在准备解析文件...', 'info', 0);
     
     try {
@@ -141,15 +175,26 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
           onUploadComplete(result);
         }
       } else {
-        updateProcessingStatus(false, '文件解析失败，请检查文件格式', 'error', 0);
+        updateProcessingStatus(
+          false, 
+          '文件解析失败\n\n💡 可能的原因：\n• 文件格式不完整或损坏\n• 文件内容过少（少于100字符）\n• 网络连接问题\n\n建议：尝试其他文件或使用"文本粘贴"功能', 
+          'error', 
+          0
+        );
       }
     } catch (error) {
-      updateProcessingStatus(
-        false, 
-        `文件处理失败: ${error instanceof Error ? error.message : '未知错误'}`, 
-        'error',
-        0
-      );
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      
+      // 检查是否是网络相关错误
+      const isNetworkError = errorMessage.toLowerCase().includes('network') || 
+                           errorMessage.toLowerCase().includes('fetch') ||
+                           errorMessage.toLowerCase().includes('connection');
+      
+      const finalMessage = isNetworkError 
+        ? `网络连接问题导致处理失败\n\n💡 建议解决方案：\n1. 点击重试按钮\n2. 检查网络连接\n3. 或使用"文本粘贴"功能\n\n详细错误：${errorMessage}`
+        : `文件处理失败: ${errorMessage}\n\n💡 建议解决方案：\n1. 点击重试按钮\n2. 检查文件完整性\n3. 或使用"文本粘贴"功能`;
+        
+      updateProcessingStatus(false, finalMessage, 'error', 0, true);
     }
   };
 
@@ -172,6 +217,9 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
       return;
     }
 
+    // 保存上传数据用于重试
+    setLastUploadData({ type: 'url', data: url });
+    
     updateProcessingStatus(true, '正在解析URL...', 'info');
     
     try {
@@ -184,10 +232,14 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
         updateProcessingStatus(false, 'URL解析失败，请检查链接是否有效', 'error');
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      
       updateProcessingStatus(
         false, 
-        `URL解析失败: ${error instanceof Error ? error.message : '未知错误'}。提示：由于浏览器安全限制，某些网站可能无法直接访问。建议复制网页内容后使用文本粘贴功能。`, 
-        'error'
+        `URL解析失败: ${errorMessage}\n\n💡 常见问题及解决方案：\n• CORS限制：许多网站禁止跨域访问\n• 网络连接：检查网络连接是否正常\n• 页面保护：某些网站有反爬虫保护\n\n建议：点击重试或复制网页内容后使用"文本粘贴"功能`, 
+        'error',
+        undefined,
+        true
       );
     }
   };
@@ -208,6 +260,9 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
       return;
     }
 
+    // 保存上传数据用于重试
+    setLastUploadData({ type: 'text', data: text });
+    
     updateProcessingStatus(true, '正在解析文本...', 'info');
     
     try {
@@ -337,12 +392,51 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
     setShowSplitSelector(false);
     setShowSplitConfirm(false);
     setCurrentParseResult(null);
+    setLastUploadData(null);
     setProcessingStatus({
       isProcessing: false,
       message: '',
       type: 'info',
       progress: 0,
+      canRetry: false,
     });
+  };
+
+  /**
+   * 重试处理
+   */
+  const handleRetry = async () => {
+    if (!lastUploadData) return;
+
+    // 清除当前错误状态
+    setProcessingStatus({
+      isProcessing: false,
+      message: '',
+      type: 'info',
+      progress: 0,
+      canRetry: false,
+    });
+
+    // 根据类型重新执行相应的处理函数
+    switch (lastUploadData.type) {
+      case 'file':
+        if (lastUploadData.data instanceof File) {
+          await handleFileUpload([lastUploadData.data] as any);
+        }
+        break;
+      case 'url':
+        if (typeof lastUploadData.data === 'string') {
+          setUrlInput(lastUploadData.data);
+          await handleURLSubmit();
+        }
+        break;
+      case 'text':
+        if (typeof lastUploadData.data === 'string') {
+          setTextInput(lastUploadData.data);
+          await handleTextSubmit();
+        }
+        break;
+    }
   };
 
   const isProcessing = processingStatus.isProcessing || loading;
@@ -574,15 +668,22 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
                 </div>
               )}
               
-              <span className={`text-sm font-medium ${
+              <div className={`text-sm ${
                 processingStatus.type === 'success' 
                   ? 'text-green-900' 
                   : processingStatus.type === 'error'
                   ? 'text-red-900'
                   : 'text-blue-900'
               }`}>
-                {processingStatus.message}
-              </span>
+                <div className="font-medium mb-1">
+                  {processingStatus.message.split('\n')[0]}
+                </div>
+                {processingStatus.message.includes('\n') && (
+                  <div className="text-xs leading-relaxed whitespace-pre-line opacity-90">
+                    {processingStatus.message.split('\n').slice(1).join('\n')}
+                  </div>
+                )}
+              </div>
             </div>
             
             {/* 进度条 - 仅在处理中且有进度数据时显示 */}
@@ -598,6 +699,20 @@ const DocumentUploader: React.FC<DocumentUploaderProps> = ({
                     style={{ width: `${Math.max(0, Math.min(100, processingStatus.progress))}%` }}
                   ></div>
                 </div>
+              </div>
+            )}
+
+            {/* 重试按钮 - 仅在错误状态且可重试时显示 */}
+            {processingStatus.type === 'error' && processingStatus.canRetry && !processingStatus.isProcessing && (
+              <div className="flex justify-center mt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRetry}
+                  className="text-xs"
+                >
+                  🔄 重试
+                </Button>
               </div>
             )}
           </div>

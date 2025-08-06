@@ -130,6 +130,11 @@ export const getSessionById = (id: string): LearningSession | null => {
  */
 export const saveSession = (session: LearningSession): boolean => {
   try {
+    console.log('💾 LocalStorage.saveSession 开始:', {
+      sessionId: session.id,
+      title: session.title
+    });
+    
     const data = safeGetStorageData();
     const existingIndex = data.sessions.findIndex(s => s.id === session.id);
     
@@ -140,15 +145,19 @@ export const saveSession = (session: LearningSession): boolean => {
 
     if (existingIndex >= 0) {
       // 更新现有会话
+      console.log('💾 更新现有会话');
       data.sessions[existingIndex] = updatedSession;
     } else {
       // 新增会话
+      console.log('💾 新增会话');
       data.sessions.push(updatedSession);
     }
 
-    return safeSaveStorageData(data);
+    const result = safeSaveStorageData(data);
+    console.log('💾 LocalStorage.saveSession 结果:', result);
+    return result;
   } catch (error) {
-    console.error('保存会话失败:', error);
+    console.error('💾 保存会话失败:', error);
     return false;
   }
 };

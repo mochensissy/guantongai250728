@@ -114,11 +114,18 @@ export class CloudStorageService {
    */
   async saveSession(session: LearningSession): Promise<{ success: boolean; error?: string }> {
     try {
+      console.log('☁️ CloudStorage.saveSession 开始:', {
+        sessionId: session.id,
+        title: session.title,
+        nodeEnv: process.env.NODE_ENV
+      });
+      
       // 在开发环境下，直接返回成功状态，避免数据库格式问题
       if (process.env.NODE_ENV === 'development') {
-        console.log('开发环境：模拟会话同步成功 -', session.title)
+        console.log('☁️ 开发环境：模拟会话同步成功 -', session.title)
         // 模拟一些延迟，让用户看到同步过程
         await new Promise(resolve => setTimeout(resolve, 300))
+        console.log('☁️ 开发环境：会话同步完成')
         return { success: true }
       }
 

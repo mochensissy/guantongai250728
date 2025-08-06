@@ -182,11 +182,7 @@ const DashboardPage: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* 智能同步控制 */}
-        <div className="mb-8">
-          <SmartSyncControl compact={false} showDetails={true} />
-        </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">{/* 移除重复的同步控件，只保留顶部的 */}
 
         {/* 欢迎区域 */}
         <div className="mb-12">

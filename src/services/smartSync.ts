@@ -159,6 +159,11 @@ export class SmartSyncManager {
         console.log('没有收藏卡片，创建示例数据用于演示')
         const demoCards = this.createDemoCards()
         for (const card of demoCards) {
+          // 检查演示卡片是否已同步
+          if (this.isItemSynced(card.id)) {
+            continue // 跳过已同步的演示卡片
+          }
+          
           const importance = this.classifier.classifyCard(card)
           const size = this.classifier.estimateSize(card)
           
@@ -179,6 +184,11 @@ export class SmartSyncManager {
       
       // 处理真实卡片数据
       for (const card of cards) {
+        // 检查卡片是否已同步
+        if (this.isItemSynced(card.id)) {
+          continue // 跳过已同步的卡片
+        }
+        
         const importance = this.classifier.classifyCard(card)
         const size = this.classifier.estimateSize(card)
         
@@ -198,7 +208,7 @@ export class SmartSyncManager {
       
       // 2. 分析用户偏好
       const preferences = localStorageService.getUserPreferences()
-      if (preferences) {
+      if (preferences && !this.isItemSynced('user-preferences')) {
         const size = this.classifier.estimateSize(preferences)
         const item: DataItem = {
           id: 'user-preferences',
@@ -219,6 +229,11 @@ export class SmartSyncManager {
       for (const session of sessions) {
         const importance = this.classifier.classifySession(session)
         if (importance === 'temporary') continue // 跳过临时数据
+        
+        // 检查会话是否已同步
+        if (this.isItemSynced(session.id)) {
+          continue // 跳过已同步的会话
+        }
         
         const size = this.classifier.estimateSize(session)
         const item: DataItem = {
@@ -275,11 +290,11 @@ export class SmartSyncManager {
   }
   
   /**
-   * 执行完整同步 (核心 + 重要数据)
+   * 执行完整同步 (所有数据：核心 + 重要 + 可选)
    */
   async executeFullSync(): Promise<SyncResult> {
     const plan = await this.generateSyncPlan()
-    const allItems = [...plan.critical, ...plan.important]
+    const allItems = [...plan.critical, ...plan.important, ...plan.optional]
     return this.executeSyncItems(allItems)
   }
   
@@ -336,6 +351,8 @@ export class SmartSyncManager {
           if (syncSuccess) {
             result.syncedItems++
             result.savedSize += item.estimatedSize
+            // 标记项目为已同步
+            this.markItemAsSynced(item.id)
           } else {
             result.failedItems++
           }
@@ -422,6 +439,39 @@ export class SmartSyncManager {
     } catch (error) {
       console.warn('更新同步时间失败:', error)
     }
+  }
+
+  /**
+   * 标记项目为已同步
+   */
+  private markItemAsSynced(itemId: string): void {
+    try {
+      const syncedItems = this.getSyncedItems()
+      syncedItems.add(itemId)
+      localStorage.setItem('syncedItems', JSON.stringify([...syncedItems]))
+    } catch (error) {
+      console.warn('标记同步状态失败:', error)
+    }
+  }
+
+  /**
+   * 获取已同步项目集合
+   */
+  private getSyncedItems(): Set<string> {
+    try {
+      const stored = localStorage.getItem('syncedItems')
+      return new Set(stored ? JSON.parse(stored) : [])
+    } catch {
+      return new Set()
+    }
+  }
+
+  /**
+   * 检查项目是否已同步
+   */
+  private isItemSynced(itemId: string): boolean {
+    const syncedItems = this.getSyncedItems()
+    return syncedItems.has(itemId)
   }
   
   /**

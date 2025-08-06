@@ -377,15 +377,23 @@ const UploadPageContent: React.FC = () => {
   };
 
   /**
-   * 创建学习会话
+   * 创建学习会话 - 简化版本
    */
   const handleCreateSession = async () => {
-    if (!parseResult || !apiConfig) return;
+    console.log('🚀 简化版会话创建开始');
+    
+    if (!parseResult || !apiConfig) {
+      console.error('❌ 缺少必要条件');
+      alert('缺少必要的解析结果或API配置');
+      return;
+    }
 
     setIsCreatingSession(true);
 
     try {
       const sessionId = generateId();
+      console.log('📝 生成会话ID:', sessionId);
+      
       const session: LearningSession = {
         id: sessionId,
         title: parseResult.title || '未命名文档',
@@ -393,23 +401,30 @@ const UploadPageContent: React.FC = () => {
         updatedAt: Date.now(),
         learningLevel,
         documentContent: parseResult.content,
-        documentType: 'text', // 这里可以根据实际解析结果设置
+        documentType: 'text',
         outline,
         messages: [],
         status: 'active',
-        cards: [], // 初始化为空数组
+        cards: [],
       };
 
-      const success = await storageAdapter.saveSession(session);
+      console.log('💾 直接保存到本地存储');
+      // 直接使用本地存储，避免复杂的混合存储逻辑
+      const { saveSession } = await import('../src/utils/storage');
+      const saveResult = saveSession(session);
       
-      if (success) {
-        router.push(`/learn/${sessionId}`);
+      console.log('💾 本地存储结果:', saveResult);
+      
+      if (saveResult) {
+        console.log('🚀 直接跳转到学习页面');
+        window.location.href = `/learn/${sessionId}`;
       } else {
-        throw new Error('保存会话失败');
+        throw new Error('本地存储失败');
       }
+      
     } catch (error) {
-      console.error('创建会话失败:', error);
-      alert(`创建会话失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      console.error('❌ 会话创建失败:', error);
+      alert(`创建失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
       setIsCreatingSession(false);
     }
