@@ -22,6 +22,8 @@ export interface ThemedChatMessageProps {
   className?: string;
   /** 是否为HTML内容 */
   isHTML?: boolean;
+  /** 操作区插槽：用于在消息气泡右上角放置操作按钮（如收藏/灵感） */
+  actions?: React.ReactNode;
 }
 
 /**
@@ -34,6 +36,7 @@ export const ThemedChatMessage: React.FC<ThemedChatMessageProps> = ({
   showAvatar = true,
   className = '',
   isHTML = false,
+  actions,
 }) => {
   const { currentLevel, currentTheme } = useTheme();
   
@@ -193,6 +196,13 @@ export const ThemedChatMessage: React.FC<ThemedChatMessageProps> = ({
           {/* 时间戳 */}
           {renderTimestamp()}
         </div>
+
+        {/* 操作按钮插槽：定位在消息容器右上角 */}
+        {actions && (
+          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            {actions}
+          </div>
+        )}
         
         {/* 专家模式的简洁状态指示器 */}
         {isExpertMode && !isUser && (

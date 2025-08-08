@@ -323,41 +323,41 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           timestamp={formatTimestamp(message.timestamp)}
           showAvatar={true}
           isHTML={isAssistant}
+          actions={
+            isAssistant
+              ? !message.isBookmarked
+                ? (
+                    <div className="flex gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleInspirationClick(message.id);
+                        }}
+                        className="w-7 h-7 bg-yellow-500 hover:bg-yellow-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors duration-200"
+                        title="有灵感，添加笔记"
+                      >
+                        <Lightbulb className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleBookmarkClick(message.id);
+                        }}
+                        className="w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors duration-200"
+                        title="直接收藏"
+                      >
+                        <Star className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )
+                : (
+                    <div className="w-7 h-7 flex items-center justify-center">
+                      <Star className="w-5 h-5 text-yellow-500 fill-current drop-shadow-sm" />
+                    </div>
+                  )
+              : undefined
+          }
         />
-
-        {/* 保持原有的收藏功能（在消息右上角浮动） */}
-        {isAssistant && (
-          <div className="absolute top-2 right-2 z-20 group-hover:opacity-100 opacity-0 transition-opacity duration-200 flex gap-1">
-            {!message.isBookmarked ? (
-              <>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleInspirationClick(message.id);
-                  }}
-                  className="w-7 h-7 bg-yellow-500 hover:bg-yellow-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors duration-200"
-                  title="有灵感，添加笔记"
-                >
-                  <Lightbulb className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleBookmarkClick(message.id);
-                  }}
-                  className="w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center shadow-md transition-colors duration-200"
-                  title="直接收藏"
-                >
-                  <Star className="w-3.5 h-3.5" />
-                </button>
-              </>
-            ) : (
-              <div className="w-7 h-7 flex items-center justify-center">
-                <Star className="w-5 h-5 text-yellow-500 fill-current drop-shadow-sm" />
-              </div>
-            )}
-          </div>
-        )}
 
         {/* AI消息的选择按钮 */}
         {showChoiceButtons && (
