@@ -120,12 +120,12 @@ export class CloudStorageService {
         nodeEnv: process.env.NODE_ENV
       });
       
-      // 在开发环境下，直接返回成功状态，避免数据库格式问题
-      if (process.env.NODE_ENV === 'development') {
-        console.log('☁️ 开发环境：模拟会话同步成功 -', session.title)
-        // 模拟一些延迟，让用户看到同步过程
+      // 开发环境默认模拟成功；当显式开启开关时走真实云同步
+      const enableDevCloudSync = process.env.NEXT_PUBLIC_ENABLE_CLOUD_SYNC_DEV === 'true'
+      if (process.env.NODE_ENV === 'development' && !enableDevCloudSync) {
+        console.log('☁️ 开发环境：模拟会话同步成功(可通过 NEXT_PUBLIC_ENABLE_CLOUD_SYNC_DEV=true 启用真实写入) -', session.title)
         await new Promise(resolve => setTimeout(resolve, 300))
-        console.log('☁️ 开发环境：会话同步完成')
+        console.log('☁️ 开发环境：会话同步完成(模拟)')
         return { success: true }
       }
 
@@ -420,10 +420,10 @@ export class CloudStorageService {
    */
   async addCard(card: LearningCard): Promise<{ success: boolean; error?: string }> {
     try {
-      // 在开发环境下，直接返回成功状态，避免数据库格式问题
-      if (process.env.NODE_ENV === 'development') {
-        console.log('开发环境：模拟云端同步成功 -', card.title)
-        // 模拟一些延迟，让用户看到同步过程
+      // 开发环境默认模拟成功；当显式开启开关时走真实云同步
+      const enableDevCloudSync = process.env.NEXT_PUBLIC_ENABLE_CLOUD_SYNC_DEV === 'true'
+      if (process.env.NODE_ENV === 'development' && !enableDevCloudSync) {
+        console.log('开发环境：模拟云端同步成功(可通过 NEXT_PUBLIC_ENABLE_CLOUD_SYNC_DEV=true 启用真实写入) -', card.title)
         await new Promise(resolve => setTimeout(resolve, 200))
         return { success: true }
       }

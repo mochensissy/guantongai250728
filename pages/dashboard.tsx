@@ -90,6 +90,23 @@ const DashboardPage: React.FC = () => {
   };
 
   /**
+   * 批量删除
+   */
+  const handleBatchDelete = (ids: string[]) => {
+    if (ids.length === 0) return;
+    if (!window.confirm(`确定要删除选中的 ${ids.length} 个学习记录吗？此操作不可恢复。`)) return;
+    let deleted = 0;
+    ids.forEach(id => {
+      const ok = deleteSession(id);
+      if (ok) deleted += 1;
+    });
+    setSessions(prev => prev.filter(s => !ids.includes(s.id)));
+    if (deleted < ids.length) {
+      alert(`有 ${ids.length - deleted} 个记录删除失败，请重试`);
+    }
+  };
+
+  /**
    * 保存API配置
    */
   const handleSaveAPIConfig = (config: APIConfig) => {
@@ -256,6 +273,7 @@ const DashboardPage: React.FC = () => {
             sessions={sessions}
             onEnterSession={handleEnterSession}
             onDeleteSession={handleDeleteSession}
+            onBatchDelete={handleBatchDelete}
           />
         </div>
 

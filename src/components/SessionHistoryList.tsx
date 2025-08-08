@@ -33,6 +33,8 @@ interface SessionHistoryListProps {
   onDeleteSession: (sessionId: string) => void;
   /** 是否正在加载 */
   loading?: boolean;
+  /** 批量删除回调（可选） */
+  onBatchDelete?: (ids: string[]) => void;
 }
 
 const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
@@ -40,6 +42,7 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
   onEnterSession,
   onDeleteSession,
   loading = false,
+  onBatchDelete,
 }) => {
   // 状态管理
   const [searchTerm, setSearchTerm] = useState('');
@@ -150,8 +153,18 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
     return Math.round((completedCount / session.outline.length) * 100);
   };
 
+  // 批量选择
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const allSelected = selectedIds.length > 0 && selectedIds.length === filteredAndSortedSessions.length;
+  const toggleSelectAll = () => {
+    if (allSelected) setSelectedIds([]); else setSelectedIds(filteredAndSortedSessions.map(s => s.id));
+  };
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
   if (loading) {
-    return (
+  return (
       <div className="space-y-4">
         {[...Array(3)].map((_, index) => (
           <Card key={index} className="animate-pulse">
@@ -222,7 +235,27 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
             </p>
           </div>
         ) : (
-          filteredAndSortedSessions.map((session) => {
+          <>
+          {/* 批量操作条 */}
+          {filteredAndSortedSessions.length > 0 && (
+            <div className="flex items-center justify-between px-2 text-sm text-gray-600">
+              <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
+                全选（{selectedIds.length}/{filteredAndSortedSessions.length}）
+              </label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={selectedIds.length === 0 || !onBatchDelete}
+                  onClick={() => onBatchDelete && onBatchDelete(selectedIds)}
+                >
+                  批量删除
+                </Button>
+              </div>
+            </div>
+          )}
+          {filteredAndSortedSessions.map((session) => {
             const statusInfo = getStatusInfo(session.status);
             const progress = calculateProgress(session);
 
@@ -233,8 +266,17 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
                 className="transition-all duration-200"
               >
                 <div className="flex items-start justify-between">
-                  {/* 会话信息 */}
+                  {/* 左侧选择框 + 会话信息 */}
                   <div className="flex-1 min-w-0">
+                    <div className="mb-2">
+                      <input
+                        type="checkbox"
+                        className="mr-2 align-middle"
+                        checked={selectedIds.includes(session.id)}
+                        onChange={() => toggleSelectOne(session.id)}
+                        title="选择该会话"
+                      />
+                    </div>
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-lg font-medium text-gray-900 truncate">
                         {session.title}
@@ -335,7 +377,8 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
                 </div>
               </Card>
             );
-          })
+          })}
+          </>
         )}
       </div>
 
