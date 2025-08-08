@@ -66,6 +66,23 @@ const DashboardPage: React.FC = () => {
     };
 
     initializeData();
+    // 监听本地数据导入事件，导入后即时刷新列表
+    const handler = () => {
+      try {
+        const loadedSessions = getAllSessions();
+        setSessions(loadedSessions);
+      } catch (e) {
+        console.error('刷新会话失败:', e);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('localDataImported', handler);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('localDataImported', handler);
+      }
+    };
   }, [user, loading, router]);
 
   /**
@@ -87,6 +104,22 @@ const DashboardPage: React.FC = () => {
         alert('删除失败，请重试');
       }
     }
+  };
+
+  /**
+   * 批量删除（一次确认）
+   */
+  const handleBatchDelete = (ids: string[]) => {
+    if (ids.length === 0) return;
+    if (!window.confirm(`确定要删除选中的 ${ids.length} 个学习记录吗？此操作不可恢复。`)) return;
+    let updated = [...sessions];
+    ids.forEach(id => {
+      const ok = deleteSession(id);
+      if (ok) {
+        updated = updated.filter(s => s.id !== id);
+      }
+    });
+    setSessions(updated);
   };
 
   /**
@@ -256,6 +289,7 @@ const DashboardPage: React.FC = () => {
             sessions={sessions}
             onEnterSession={handleEnterSession}
             onDeleteSession={handleDeleteSession}
+            onBatchDelete={handleBatchDelete}
           />
         </div>
 

@@ -31,6 +31,8 @@ interface SessionHistoryListProps {
   onEnterSession: (sessionId: string) => void;
   /** 删除会话回调 */
   onDeleteSession: (sessionId: string) => void;
+  /** 批量删除回调（一次性确认） */
+  onBatchDelete?: (ids: string[]) => void;
   /** 是否正在加载 */
   loading?: boolean;
 }
@@ -39,6 +41,7 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
   sessions,
   onEnterSession,
   onDeleteSession,
+  onBatchDelete,
   loading = false,
 }) => {
   // 状态管理
@@ -101,11 +104,14 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
 
   const handleBatchDelete = () => {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(`确定要删除选中的 ${selectedIds.length} 个学习记录吗？此操作不可恢复。`)) {
-      return;
+    if (onBatchDelete) {
+      onBatchDelete(selectedIds);
+    } else {
+      if (!window.confirm(`确定要删除选中的 ${selectedIds.length} 个学习记录吗？此操作不可恢复。`)) {
+        return;
+      }
+      selectedIds.forEach(id => onDeleteSession(id));
     }
-    // 逐个调用外部删除回调
-    selectedIds.forEach(id => onDeleteSession(id));
     setSelectedIds([]);
   };
 
