@@ -45,6 +45,7 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'title' | 'status'>('recent');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   /**
    * 过滤和排序会话
@@ -81,6 +82,32 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
 
     return filtered;
   }, [sessions, searchTerm, filterStatus, sortBy]);
+
+  // 是否全选（基于当前过滤后的列表）
+  const allSelected = filteredAndSortedSessions.length > 0 &&
+    selectedIds.length === filteredAndSortedSessions.length;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredAndSortedSessions.map(s => s.id));
+    }
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`确定要删除选中的 ${selectedIds.length} 个学习记录吗？此操作不可恢复。`)) {
+      return;
+    }
+    // 逐个调用外部删除回调
+    selectedIds.forEach(id => onDeleteSession(id));
+    setSelectedIds([]);
+  };
 
   /**
    * 格式化日期
@@ -180,8 +207,8 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
           />
         </div>
 
-        {/* 状态筛选 */}
-        <div className="flex gap-2">
+        {/* 状态筛选 + 批量操作 */}
+        <div className="flex gap-2 items-center">
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
@@ -203,6 +230,29 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
             <option value="title">标题排序</option>
             <option value="status">状态排序</option>
           </select>
+
+          {/* 批量选择与删除 */}
+          {filteredAndSortedSessions.length > 0 && (
+            <div className="flex items-center gap-3 ml-2">
+              <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4"
+                />
+                全选
+              </label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBatchDelete}
+                disabled={selectedIds.length === 0}
+              >
+                批量删除{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -233,6 +283,15 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
                 className="transition-all duration-200"
               >
                 <div className="flex items-start justify-between">
+                  {/* 选择框 */}
+                  <div className="mr-3 mt-1">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4"
+                      checked={selectedIds.includes(session.id)}
+                      onChange={() => toggleSelectOne(session.id)}
+                    />
+                  </div>
                   {/* 会话信息 */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-2">
