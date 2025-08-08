@@ -282,58 +282,82 @@ const fixCommonJsonErrors = (jsonString: string): string => {
 };
 
 /**
- * 创建回退大纲结构
- * 当JSON解析完全失败时，从AI返回的文本中提取关键信息
+ * 创建回退大纲结构（增强版）
+ * 当JSON解析失败时，尽可能从原文中检测标题/章节，生成更贴近原文的多章节大纲
  */
 const createFallbackOutline = (content: string, documentTitle?: string) => {
-  console.log('🚨 使用回退策略创建基础大纲');
-  
-  // 尝试从内容中提取章节标题
-  const chapterPattern = /第\d+章[：:]\s*(.+?)(?:\n|$)/g;
-  const sectionPattern = /\d+\.\d+[：:]\s*(.+?)(?:\n|$)/g;
-  
+  console.log('🚨 使用回退策略创建大纲（增强版）');
+
+  const text = (content || '').slice(0, 120000); // 截断以避免过长处理
+
+  // 1) 多种标题检测模式（中/英/Markdown/编号）
+  const titlePatterns: RegExp[] = [
+    /^#{1,3}\s+(.+)/, // Markdown 标题
+    /^第[一二三四五六七八九十百千\d]+[章节节讲部分]\s*[:：]?\s*(.*)/, // 中文“第X章/节”
+    /^[（\(]?(?:一|二|三|四|五|六|七|八|九|十|\d+)[）\)]?[\.、]\s*(.+)/, // 一、/1. 类型
+    /^Chapter\s*\d+\s*[:：-]?\s*(.*)/i, // 英文 Chapter N
+    /^【(.+?)】/, // 方括号标题
+  ];
+
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  type Detected = { title: string; line: string };
+  const detected: Detected[] = [];
+
+  for (const line of lines.slice(0, 200)) {
+    for (const p of titlePatterns) {
+      const m = line.match(p);
+      if (m && (m[1] || m[0])) {
+        const t = (m[1] || m[0]).trim();
+        if (t && t.length >= 2) {
+          detected.push({ title: t.replace(/^第[一二三四五六七八九十百千\d]+[章节节讲部分]\s*[:：]?\s*/,'').trim(), line });
+          break;
+        }
+      }
+    }
+  }
+
+  // 2) 基于字数的章节数估算
+  const wordCount = text.length;
+  const recommendedChapters = Math.min(8, Math.max(3, Math.round(wordCount / 8000)));
+
+  // 3) 构建章节
   const chapters: any[] = [];
-  const sections: any[] = [];
-  
-  let match;
   let order = 1;
-  
-  // 提取章节
-  while ((match = chapterPattern.exec(content)) !== null) {
-    chapters.push({
-      title: `第${Math.ceil(order/2)}章 ${match[1].trim()}`,
-      order: order++,
-      type: 'chapter',
-      level: 1,
-      chapterNumber: Math.ceil(order/2)
+
+  if (detected.length >= 2) {
+    // 取前 N 个作为章节标题
+    const uniqueTitles = Array.from(new Set(detected.map(d => d.title))).slice(0, recommendedChapters);
+    uniqueTitles.forEach((t, idx) => {
+      chapters.push({
+        title: `第${idx + 1}章 ${t}`,
+        order: order++,
+        type: 'chapter',
+        level: 1,
+        chapterNumber: idx + 1
+      });
     });
+  } else {
+    // 无法识别标题时，按长度生成占位章节
+    for (let i = 0; i < recommendedChapters; i++) {
+      chapters.push({
+        title: `第${i + 1}章 主题 ${i + 1}`,
+        order: order++,
+        type: 'chapter',
+        level: 1,
+        chapterNumber: i + 1
+      });
+    }
   }
-  
-  // 提取小节
-  while ((match = sectionPattern.exec(content)) !== null) {
-    const parentChapter = Math.ceil(order/2);
-    sections.push({
-      title: match[0].trim(),
-      order: order++,
-      type: 'section',
-      level: 2,
-      parentChapter,
-      estimatedMinutes: 10
-    });
-  }
-  
-  // 如果没有找到结构化内容，创建基础大纲
-  let outline = [...chapters, ...sections];
-  
-  if (outline.length === 0) {
-    console.log('🚨 未找到结构化内容，创建默认大纲');
-    outline = [
-      { title: '第1章 文档概述', order: 1, type: 'chapter', level: 1, chapterNumber: 1 },
-      { title: '1.1 主要内容', order: 2, type: 'section', level: 2, parentChapter: 1, estimatedMinutes: 15 },
-      { title: '1.2 重点总结', order: 3, type: 'section', level: 2, parentChapter: 1, estimatedMinutes: 10 }
-    ];
-  }
-  
+
+  // 4) 为每个章节生成2个基础小节
+  const sections: any[] = [];
+  chapters.forEach((c, idx) => {
+    sections.push({ title: `${idx + 1}.1 主要内容`, order: order++, type: 'section', level: 2, parentChapter: idx + 1, estimatedMinutes: 15 });
+    sections.push({ title: `${idx + 1}.2 重点总结`, order: order++, type: 'section', level: 2, parentChapter: idx + 1, estimatedMinutes: 10 });
+  });
+
+  const outline = [...chapters, ...sections];
+
   return {
     documentTitle: documentTitle || '文档大纲',
     outline
