@@ -12,6 +12,7 @@ import React, { useState, useEffect } from 'react'
 import { 
   Trash2, 
   Download, 
+  Upload,
   Database, 
   Clock, 
   AlertTriangle,
@@ -23,6 +24,8 @@ import {
 } from 'lucide-react'
 import Button from './ui/Button'
 import { optimizedHybridStorage } from '../services/optimizedHybridStorage'
+import * as localStorageService from '../utils/storage'
+import { LocalStorageData, LearningSession } from '../types'
 
 interface StorageStats {
   totalSessions: number
@@ -162,6 +165,89 @@ export default function DataLifecycleManager() {
       alert('导出失败，请重试')
     }
   }
+
+  /**
+   * 合并两个备份数据（去重：按会话ID，取updatedAt较新的；偏好字段合并；API配置保留本地优先）
+   */
+  const mergeBackupData = (current: LocalStorageData, incoming: LocalStorageData): LocalStorageData => {
+    const sessionMap = new Map<string, LearningSession>()
+    ;(current.sessions || []).forEach(s => sessionMap.set(s.id, s))
+    ;(incoming.sessions || []).forEach(s => {
+      const exist = sessionMap.get(s.id)
+      if (!exist) {
+        sessionMap.set(s.id, s)
+      } else {
+        sessionMap.set(s.id, (s.updatedAt || 0) > (exist.updatedAt || 0) ? s : exist)
+      }
+    })
+
+    const merged: LocalStorageData = {
+      sessions: Array.from(sessionMap.values()).sort((a, b) => b.updatedAt - a.updatedAt),
+      preferences: {
+        ...(current.preferences || {}),
+        ...(incoming.preferences || {})
+      },
+      // 优先保留本地API配置，若本地无则采用导入
+      apiConfig: current.apiConfig || incoming.apiConfig,
+      // 版本号可交由importData内部迁移处理
+      version: (incoming as any).version || (current as any).version || '1.0.0'
+    }
+
+    return merged
+  }
+
+  /**
+   * 导入备份数据（支持覆盖/合并）
+   */
+  const handleImportData = async () => {
+    try {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = 'application/json,.json'
+      input.onchange = async (e: any) => {
+        const file: File | undefined = e.target?.files?.[0]
+        if (!file) return
+
+        const text = await file.text()
+        let parsed: any
+        try {
+          parsed = JSON.parse(text)
+        } catch (err) {
+          alert('选择的文件不是有效的JSON')
+          return
+        }
+
+        const isOverwrite = confirm('是否以“覆盖模式”导入？\n确定：覆盖本地全部数据\n取消：进行合并导入（去重）')
+
+        let ok = false
+        if (isOverwrite) {
+          ok = localStorageService.importData(JSON.stringify(parsed))
+        } else {
+          try {
+            const current = JSON.parse(localStorageService.exportData()) as LocalStorageData
+            const merged = mergeBackupData(current, parsed as LocalStorageData)
+            ok = localStorageService.importData(JSON.stringify(merged))
+          } catch (err) {
+            console.error('合并导入失败:', err)
+            alert('合并导入失败，请重试或改用覆盖导入')
+            return
+          }
+        }
+
+        if (ok) {
+          alert(isOverwrite ? '导入成功（覆盖）' : '导入成功（合并）')
+          await loadStorageStats()
+        } else {
+          alert('导入失败，请确认文件内容与格式')
+        }
+      }
+
+      input.click()
+    } catch (error) {
+      console.error('导入数据失败:', error)
+      alert('导入失败，请重试')
+    }
+  }
   
   /**
    * 获取存储状态颜色
@@ -273,7 +359,7 @@ export default function DataLifecycleManager() {
         </div>
         
         {/* 操作按钮 */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Button
             variant="outline"
             onClick={handleCleanup}
@@ -293,6 +379,15 @@ export default function DataLifecycleManager() {
           >
             <Download className="w-4 h-4" />
             <span>导出备份</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={handleImportData}
+            className="flex items-center justify-center space-x-2"
+          >
+            <Upload className="w-4 h-4" />
+            <span>导入备份</span>
           </Button>
         </div>
       </div>
