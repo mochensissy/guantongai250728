@@ -32,6 +32,7 @@ const Button: React.FC<ButtonProps> = ({
   children,
   className = '',
   disabled,
+  type = 'button',
   ...props
 }) => {
   // 基础样式
@@ -59,6 +60,7 @@ const Button: React.FC<ButtonProps> = ({
     <button
       className={combinedClassName}
       disabled={disabled || loading}
+      type={type}
       {...props}
     >
       {/* 加载图标 */}
