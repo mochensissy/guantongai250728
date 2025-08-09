@@ -606,7 +606,8 @@ export const importData = (jsonData: string): boolean => {
     const current = safeGetStorageData();
     finalData.apiConfig = current.apiConfig || finalData.apiConfig;
 
-    return safeSaveStorageData(finalData);
+    const ok = safeSaveStorageData(finalData);
+    return ok;
   } catch (error) {
     console.error('导入数据失败:', error);
     return false;

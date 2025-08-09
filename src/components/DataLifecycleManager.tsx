@@ -226,9 +226,7 @@ export default function DataLifecycleManager() {
           try {
             const current = JSON.parse(localStorageService.exportData()) as LocalStorageData
             const merged = mergeBackupData(current, parsed as LocalStorageData)
-          ok = localStorageService.importData(JSON.stringify(merged))
-          // 合并导入后，清空墓碑，避免历史删除影响新导入的数据
-          try { localStorage.removeItem('ai-learning-platform-deleted-ids') } catch {}
+            ok = localStorageService.importData(JSON.stringify(merged))
           } catch (err) {
             console.error('合并导入失败:', err)
             alert('合并导入失败，请重试或改用覆盖导入')
@@ -237,6 +235,8 @@ export default function DataLifecycleManager() {
         }
 
         if (ok) {
+          // 无论覆盖或合并，导入成功后都清空墓碑，允许已删除记录恢复
+          try { localStorage.removeItem('ai-learning-platform-deleted-ids') } catch {}
           alert(isOverwrite ? '导入成功（覆盖）' : '导入成功（合并）')
           // 导入成功后，触发全局事件，通知仪表板和其他组件刷新列表（无需手动刷新）
           try {
