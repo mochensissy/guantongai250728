@@ -318,16 +318,16 @@ export const expertTheme: ThemeConfig = {
   },
   typography: {
     fontSize: {
-      xs: '0.6875rem',  // 11px
-      sm: '0.8125rem',  // 13px
-      base: '0.9375rem', // 15px - 紧凑阅读
-      lg: '1rem',       // 16px
-      xl: '1.125rem',   // 18px
+      xs: '0.75rem',    // 12px（提高最低阅读舒适度）
+      sm: '0.875rem',   // 14px
+      base: '1rem',     // 16px - 提升为常规阅读字号
+      lg: '1.125rem',   // 18px
+      xl: '1.25rem',    // 20px
     },
     lineHeight: {
-      tight: '1.2',     // 紧密行高 - 高手模式偏爱
-      normal: '1.4',    // 标准行高
-      relaxed: '1.6',   // 相对宽松行高
+      tight: '1.25',    // 稍加放松，避免拥挤
+      normal: '1.5',    // 标准行高
+      relaxed: '1.75',  // 更宽松行高，提升可读性
     },
     weight: {
       normal: '400',

@@ -172,20 +172,20 @@ export const ThemedChatMessage: React.FC<ThemedChatMessageProps> = ({
           {/* 消息内容 */}
           {isHTML ? (
             <div 
-              className="prose prose-sm max-w-none chat-content [&>*]:break-words [&>*]:overflow-wrap-anywhere"
+              className="prose max-w-none chat-content [&>*]:break-words [&>*]:overflow-wrap-anywhere"
               style={{
-                fontSize: 'inherit',
-                lineHeight: 'inherit',
+                fontSize: isExpertMode ? 'var(--font-size-base)' : 'inherit',
+                lineHeight: isExpertMode ? 'var(--line-height-relaxed)' : 'inherit',
                 color: 'inherit',
               }}
               dangerouslySetInnerHTML={{ __html: content }}
             />
           ) : (
             <div 
-              className="prose prose-sm max-w-none"
+              className="prose max-w-none"
               style={{
-                fontSize: 'inherit',
-                lineHeight: 'inherit',
+                fontSize: isExpertMode ? 'var(--font-size-base)' : 'inherit',
+                lineHeight: isExpertMode ? 'var(--line-height-relaxed)' : 'inherit',
                 color: 'inherit',
               }}
             >
