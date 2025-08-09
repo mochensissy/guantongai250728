@@ -8,15 +8,17 @@
  * - 用户数据展示
  */
 
-import React, { useState, useEffect } from 'react';
-import { Settings, Upload, BookOpen, Brain, Zap } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Settings, Upload, BookOpen, Brain, Zap, ArrowLeft, FileText, User } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import Button from '../src/components/ui/Button';
 import Card from '../src/components/ui/Card';
+import OutlineEditor from '../src/components/OutlineEditor';
 import APIConfigModal from '../src/components/APIConfigModal';
 import SessionHistoryList from '../src/components/SessionHistoryList';
 import SmartSyncControl from '../src/components/SmartSyncControl';
 import DataLifecycleManager from '../src/components/DataLifecycleManager';
-import { APIConfig, LearningSession } from '../src/types';
+import { APIConfig, LearningSession, DocumentParseResult, OutlineItem } from '../src/types';
 import { 
   getAllSessions, 
   deleteSession, 
@@ -25,6 +27,18 @@ import {
 } from '../src/utils/storageAdapter';
 import { useAuth } from '../src/contexts/AuthContext';
 import { useRouter } from 'next/router';
+import { generateOutline, fixExistingOutline } from '../src/utils/aiService';
+import { ThemeProvider } from '../src/contexts/ThemeContext';
+
+// 动态导入上传组件，避免SSR问题
+const DocumentUploader = dynamic(() => import('../src/components/DocumentUploader'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center py-12">
+      <div className="animate-spin rounded-full h-8 w-8 border-4 border-primary-600 border-t-transparent"></div>
+    </div>
+  )
+});
 
 const DashboardPage: React.FC = () => {
   const router = useRouter();
@@ -35,6 +49,24 @@ const DashboardPage: React.FC = () => {
   const [apiConfig, setApiConfig] = useState<APIConfig | null>(null);
   const [showAPIConfigModal, setShowAPIConfigModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // 内嵌上传流程的本地状态（仅影响“欢迎区域”的呈现）
+  const [currentStep, setCurrentStep] = useState<'upload' | 'uploaded' | 'outline' | 'level'>('upload');
+  const [parseResult, setParseResult] = useState<DocumentParseResult | null>(null);
+  const [outline, setOutline] = useState<OutlineItem[]>([]);
+  const [learningLevel, setLearningLevel] = useState<'beginner' | 'expert'>('beginner');
+  const [isGeneratingOutline, setIsGeneratingOutline] = useState(false);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const uploadSectionRef = useRef<HTMLDivElement>(null);
+
+  const scrollToUploadSection = () => {
+    // 使用requestAnimationFrame确保DOM已更新
+    requestAnimationFrame(() => {
+      if (uploadSectionRef.current) {
+        uploadSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  };
 
   /**
    * 初始化数据加载和用户认证检查
@@ -131,6 +163,119 @@ const DashboardPage: React.FC = () => {
     router.push('/upload');
   };
 
+  // 生成唯一ID（与上传页保持一致）
+  const generateId = (): string => {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return (crypto as any).randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c == 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
+  // 文档上传完成 → 生成大纲（与上传页逻辑等价）
+  const handleInlineDocumentUploaded = async (result: DocumentParseResult) => {
+    setParseResult(result);
+    scrollToUploadSection();
+
+    if (!apiConfig) {
+      alert('需要先配置AI服务');
+      setShowAPIConfigModal(true);
+      return;
+    }
+
+    setIsGeneratingOutline(true);
+    try {
+      const outlineResponse = await generateOutline(
+        apiConfig,
+        result.content,
+        result.title
+      );
+
+      if (outlineResponse.success) {
+        if (outlineResponse.generatedTitle) {
+          result.title = outlineResponse.generatedTitle;
+        }
+
+        const fixed = fixExistingOutline(outlineResponse.outline);
+        const withIds = fixed.map((item: any, index: number) => {
+          const base: any = { ...item, order: index + 1 };
+          if (item.type === 'chapter') {
+            base.id = `chapter-${item.chapterNumber || index + 1}`;
+          } else if (item.type === 'section') {
+            base.id = `section-${index + 1}`;
+            if (item.parentChapter) base.parentId = `chapter-${item.parentChapter}`;
+          }
+          return base;
+        });
+
+        setOutline(withIds);
+        setCurrentStep('outline');
+        scrollToUploadSection();
+      } else {
+        throw new Error(outlineResponse.error || '生成大纲失败');
+      }
+    } catch (error) {
+      console.error('生成大纲失败:', error);
+      setIsGeneratingOutline(false);
+      setCurrentStep('uploaded');
+      scrollToUploadSection();
+    }
+  };
+
+  const retryInlineGenerateOutline = () => {
+    if (parseResult) {
+      handleInlineDocumentUploaded(parseResult);
+    }
+  };
+
+  const handleInlineConfirmOutline = () => {
+    if (outline.length === 0) {
+      alert('请至少添加一个章节');
+      return;
+    }
+    setCurrentStep('level');
+    scrollToUploadSection();
+  };
+
+  const handleInlineCreateSession = async () => {
+    if (!parseResult || !apiConfig) {
+      alert('缺少必要的解析结果或API配置');
+      return;
+    }
+    setIsCreatingSession(true);
+    try {
+      const sessionId = generateId();
+      const session: LearningSession = {
+        id: sessionId,
+        title: parseResult.title || '未命名文档',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        learningLevel,
+        documentContent: parseResult.content,
+        documentType: 'text',
+        outline,
+        messages: [],
+        status: 'active',
+        cards: [],
+      };
+
+      const { saveSession } = await import('../src/utils/storage');
+      const ok = saveSession(session);
+      if (ok) {
+        window.location.href = `/learn/${sessionId}`;
+      } else {
+        throw new Error('本地存储失败');
+      }
+    } catch (e: any) {
+      alert(`创建失败: ${e?.message || '未知错误'}`);
+    } finally {
+      setIsCreatingSession(false);
+    }
+  };
+
   if (loading || isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -201,59 +346,191 @@ const DashboardPage: React.FC = () => {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">{/* 移除重复的同步控件，只保留顶部的 */}
 
-        {/* 欢迎区域 */}
+        {/* 欢迎区域替换为：内嵌上传流程 */}
         <div className="mb-12">
-          <div className="text-center max-w-3xl mx-auto">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">
-              让AI成为您的专属学习导师
-            </h2>
-            <p className="text-lg text-gray-600 mb-8">
-              上传任何文档，AI会为您生成个性化学习路径，提供互动式教学体验
-            </p>
-
-            {/* 特性卡片 */}
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
-              <Card className="text-center p-6">
-                <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <BookOpen className="w-6 h-6 text-primary-600" />
+          <ThemeProvider>
+          <div className="max-w-4xl mx-auto" ref={uploadSectionRef} style={{ scrollMarginTop: 80 }}>
+            {/* 第一步：上传文档 */}
+            {currentStep === 'upload' && (
+              <div className="space-y-8">
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-4">上传您的学习材料</h2>
+                  <p className="text-gray-600 max-w-2xl mx-auto">
+                    支持多种格式：PDF、Word、PowerPoint、Markdown、文本等。上传后AI将自动解析并生成学习大纲。
+                  </p>
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">智能解析</h3>
-                <p className="text-sm text-gray-600">
-                  支持PDF、Word、PPT等多种格式，自动提取关键内容
-                </p>
-              </Card>
 
-              <Card className="text-center p-6">
-                <div className="w-12 h-12 bg-secondary-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <Brain className="w-6 h-6 text-secondary-600" />
-                </div>
-                <h3 className="font-semibold text-gray-900 mb-2">个性化教学</h3>
-                <p className="text-sm text-gray-600">
-                  根据您的水平调整教学方式，小白和高手模式自由选择
-                </p>
-              </Card>
+                <DocumentUploader
+                  onUploadComplete={handleInlineDocumentUploaded}
+                  loading={isGeneratingOutline}
+                  apiConfig={apiConfig}
+                />
 
-              <Card className="text-center p-6">
-                <div className="w-12 h-12 bg-accent-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <Zap className="w-6 h-6 text-accent-600" />
+                {isGeneratingOutline && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                      <span className="text-blue-900 font-medium">AI正在分析文档内容并生成学习大纲，请稍候...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 文档已上传但大纲失败时的友好提示（与上传页一致） */}
+            {currentStep === 'uploaded' && parseResult && (
+              <div className="space-y-8">
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-4">文档解析完成</h2>
+                  <p className="text-gray-600 max-w-2xl mx-auto">您的文档已成功上传并解析。请选择下一步操作。</p>
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">知识沉淀</h3>
-                <p className="text-sm text-gray-600">
-                  一键收藏重要内容为卡片，支持导出到Anki长期记忆
-                </p>
-              </Card>
+
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <div className="flex items-start gap-4">
+                    <FileText className="w-8 h-8 text-green-500 flex-shrink-0 mt-1" />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-gray-900 mb-2">{parseResult.title || '未命名文档'}</h3>
+                      <div className="text-sm text-gray-500 space-y-1">
+                        {parseResult.metadata?.wordCount && (
+                          <p>字数：{parseResult.metadata.wordCount.toLocaleString()} 字</p>
+                        )}
+                        {parseResult.metadata?.pageCount && (
+                          <p>页数：{parseResult.metadata.pageCount} 页</p>
+                        )}
+                        <p className="text-green-600 font-medium">✅ 文档解析成功</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-amber-600 text-sm">⚠️</span>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-amber-900 mb-2">大纲生成遇到问题</h3>
+                      <p className="text-amber-700 text-sm mb-4">可能是网络、API配置或文档内容复杂导致。您可以重试或使用基础大纲。</p>
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <Button variant="primary" onClick={retryInlineGenerateOutline} loading={isGeneratingOutline}>
+                          重试生成大纲
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            // 使用上传页中的备用大纲策略：简化起见，引导用户去上传页完整处理
+                            setCurrentStep('upload');
+                            setParseResult(null);
+                          }}
+                        >
+                          返回重新上传
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 第二步：确认/编辑大纲 */}
+            {currentStep === 'outline' && parseResult && (
+              <div className="space-y-8">
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-4">确认学习大纲</h2>
+                  <p className="text-gray-600 max-w-2xl mx-auto">AI已为您生成学习大纲，可根据需要进行调整。</p>
+                </div>
+
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <div className="flex items-start gap-4">
+                    <FileText className="w-8 h-8 text-gray-400 flex-shrink-0 mt-1" />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-gray-900 mb-2">{parseResult.title || '未命名文档'}</h3>
+                      <div className="text-sm text-gray-500 space-y-1">
+                        {parseResult.metadata?.wordCount && (
+                          <p>字数：{parseResult.metadata.wordCount.toLocaleString()} 字</p>
+                        )}
+                        {parseResult.metadata?.pageCount && (
+                          <p>页数：{parseResult.metadata.pageCount} 页</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">学习大纲（{outline.length} 个章节）</h3>
+                  <OutlineEditor items={outline} onChange={setOutline} readonly={false} showNumbers={true} />
+                </div>
+
+                <div className="flex justify-center">
+                  <Button variant="primary" size="lg" onClick={handleInlineConfirmOutline} disabled={outline.length === 0}>
+                    确认大纲，下一步
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* 第三步：选择学习水平并创建会话 */}
+            {currentStep === 'level' && (
+              <div className="space-y-8">
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-4">选择您的学习水平</h2>
+                  <p className="text-gray-600 max-w-2xl mx-auto">AI私教将根据您选择的水平调整教学方式。</p>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+                  <div
+                    className={`p-6 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                      learningLevel === 'beginner' ? 'border-primary-500 bg-primary-50 shadow-lg' : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
+                    }`}
+                    onClick={() => setLearningLevel('beginner')}
+                  >
+                    <div className="text-center">
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                        learningLevel === 'beginner' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        <User className="w-8 h-8" />
+                      </div>
+                      <h3 className={`text-xl font-semibold mb-3 ${learningLevel === 'beginner' ? 'text-primary-900' : 'text-gray-900'}`}>小白模式</h3>
+                      <ul className="text-sm text-gray-600 space-y-1 ml-4 text-left">
+                        <li>• 节奏缓慢，循序渐进</li>
+                        <li>• 详细解释每个概念</li>
+                        <li>• 提供具体的操作步骤</li>
+                      </ul>
+                    </div>
             </div>
 
-            {/* 行动按钮 */}
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={handleStartNewSession}
-              icon={<Upload className="w-5 h-5" />}
-            >
-              立即开始学习
+                  <div
+                    className={`p-6 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                      learningLevel === 'expert' ? 'border-secondary-500 bg-secondary-50 shadow-lg' : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
+                    }`}
+                    onClick={() => setLearningLevel('expert')}
+                  >
+                    <div className="text-center">
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                        learningLevel === 'expert' ? 'bg-secondary-600 text-white' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        <Zap className="w-8 h-8" />
+                      </div>
+                      <h3 className={`text-xl font-semibold mb-3 ${learningLevel === 'expert' ? 'text-secondary-900' : 'text-gray-900'}`}>高手模式</h3>
+                      <ul className="text-sm text-gray-600 space-y-1 ml-4 text-left">
+                        <li>• 节奏较快，直击要点</li>
+                        <li>• 聚焦核心概念和差异</li>
+                        <li>• 讨论设计原理和最佳实践</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-center">
+                  <Button variant="primary" size="lg" onClick={handleInlineCreateSession} loading={isCreatingSession} icon={<FileText className="w-5 h-5" />}>
+                    开始学习
             </Button>
+                </div>
+              </div>
+            )}
           </div>
+          </ThemeProvider>
         </div>
 
         {/* 学习历史区域 */}
