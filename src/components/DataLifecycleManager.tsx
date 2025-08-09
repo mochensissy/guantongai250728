@@ -236,6 +236,10 @@ export default function DataLifecycleManager() {
 
         if (ok) {
           alert(isOverwrite ? '导入成功（覆盖）' : '导入成功（合并）')
+          // 导入成功后，触发全局事件，通知仪表板和其他组件刷新列表（无需手动刷新）
+          try {
+            window.dispatchEvent(new CustomEvent('storageImported'))
+          } catch {}
           await loadStorageStats()
         } else {
           alert('导入失败，请确认文件内容与格式')

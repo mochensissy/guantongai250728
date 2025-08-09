@@ -548,6 +548,11 @@ export const importData = (jsonData: string): boolean => {
       ? migrateStorageData(importedData)
       : importedData;
 
+    // 安全策略：永远保留本地已配置的 API，不从外部导入覆盖
+    // 这样导出的备份无需包含 apiConfig，导入也不会提示重新配置
+    const current = safeGetStorageData();
+    finalData.apiConfig = current.apiConfig || finalData.apiConfig;
+
     return safeSaveStorageData(finalData);
   } catch (error) {
     console.error('导入数据失败:', error);

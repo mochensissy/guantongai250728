@@ -98,6 +98,24 @@ const DashboardPage: React.FC = () => {
     };
 
     initializeData();
+
+    // 监听“导入完成”事件，自动刷新学习历史（无需手动刷新页面）
+    const onImported = () => {
+      try {
+        const updated = getAllSessions();
+        setSessions(updated);
+      } catch (e) {
+        console.error('刷新会话失败:', e);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storageImported', onImported);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storageImported', onImported);
+      }
+    };
   }, [user, loading, router]);
 
   /**
