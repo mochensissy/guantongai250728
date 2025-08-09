@@ -290,30 +290,20 @@ const createFallbackOutline = (content: string, documentTitle?: string) => {
 
   const text = (content || '').slice(0, 120000); // 截断以避免过长处理
 
-  // 1) 多种标题检测模式（中/英/Markdown/编号/冒号式）
+  // 1) 多种标题检测模式（中/英/Markdown/编号）
   const titlePatterns: RegExp[] = [
     /^#{1,3}\s+(.+)/, // Markdown 标题
     /^第[一二三四五六七八九十百千\d]+[章节节讲部分]\s*[:：]?\s*(.*)/, // 中文“第X章/节”
     /^[（\(]?(?:一|二|三|四|五|六|七|八|九|十|\d+)[）\)]?[\.、]\s*(.+)/, // 一、/1. 类型
     /^Chapter\s*\d+\s*[:：-]?\s*(.*)/i, // 英文 Chapter N
     /^【(.+?)】/, // 方括号标题
-    // 常见“主题：副标题”形式（如“能量平衡：比例合理更重要”）
-    /^(?!◆)[^：:，。；！？]{2,30}[：:][^：:]{2,60}$/,
-    // 无标点短句式标题（如“选对食物是一门技术活儿”）
-    /^(?!◆)[^，。；！？：:、—\-]{6,24}$/
   ];
 
-  const lines = text
-    .split(/\r?\n/)
-    .map(l => l.trim())
-    .filter(Boolean)
-    // 过滤明显的项目符号行，避免把“◆ 内容”识别为标题
-    .filter(l => !l.startsWith('◆'));
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   type Detected = { title: string; line: string };
   const detected: Detected[] = [];
 
-  // 向后多看一些行，提升从正文中抓取主题式标题的概率
-  for (const line of lines.slice(0, 1000)) {
+  for (const line of lines.slice(0, 200)) {
     for (const p of titlePatterns) {
       const m = line.match(p);
       if (m && (m[1] || m[0])) {
@@ -336,10 +326,7 @@ const createFallbackOutline = (content: string, documentTitle?: string) => {
 
   if (detected.length >= 2) {
     // 取前 N 个作为章节标题
-    const uniqueTitles = Array.from(new Set(detected.map(d => d.title)))
-      // 去掉过短或过泛的标题
-      .filter(t => t.length >= 4 && !/^主题\s*\d+$/.test(t))
-      .slice(0, recommendedChapters);
+    const uniqueTitles = Array.from(new Set(detected.map(d => d.title))).slice(0, recommendedChapters);
     uniqueTitles.forEach((t, idx) => {
       chapters.push({
         title: `第${idx + 1}章 ${t}`,
@@ -649,26 +636,12 @@ const parseOutlineFromText = (content: string): any[] => {
   const chapterPattern = /第(\d+)章\s*(.+)/;
   const sectionPattern = /(\d+)\.(\d+)\s*(.+)/;
   const titlePattern = /"title":\s*"([^"]*)"/;
-  // 新增：识别“主题：副标题”形式的中文标题
-  const colonHeadingPattern = /^(?!◆)[^：:，。；！？]{2,30}[：:][^：:]{2,60}$/;
   
   for (const line of lines) {
     const trimmedLine = line.trim();
     
-    // 跳过空行、项目符号和明显的JSON语法
-    if (!trimmedLine || trimmedLine.startsWith('◆') || trimmedLine.includes('{') || trimmedLine.includes('}') || trimmedLine.includes('[') || trimmedLine.includes(']')) {
-      continue;
-    }
-    // 识别“主题：副标题”形式的中文标题为章节
-    if (colonHeadingPattern.test(trimmedLine)) {
-      items.push({
-        title: trimmedLine,
-        order: order++,
-        type: 'chapter',
-        level: 1,
-        chapterNumber: items.filter(i => i.type === 'chapter').length + 1
-      });
-      console.log('📝 识别冒号式章节:', trimmedLine);
+    // 跳过空行和明显的JSON语法
+    if (!trimmedLine || trimmedLine.includes('{') || trimmedLine.includes('}') || trimmedLine.includes('[') || trimmedLine.includes(']')) {
       continue;
     }
     
