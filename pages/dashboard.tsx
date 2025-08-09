@@ -110,31 +110,39 @@ const DashboardPage: React.FC = () => {
   /**
    * 删除学习会话
    */
-  const handleDeleteSession = (sessionId: string) => {
-    if (window.confirm('确定要删除这个学习记录吗？此操作不可恢复。')) {
-      const success = deleteSession(sessionId);
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!window.confirm('确定要删除这个学习记录吗？此操作不可恢复。')) return;
+
+    try {
+      const success = await deleteSession(sessionId);
       if (success) {
         setSessions(prev => prev.filter(s => s.id !== sessionId));
       } else {
         alert('删除失败，请重试');
       }
+    } catch (e) {
+      console.error('删除失败:', e);
+      alert('删除失败，请重试');
     }
   };
 
   /**
    * 批量删除
    */
-  const handleBatchDelete = (ids: string[]) => {
+  const handleBatchDelete = async (ids: string[]) => {
     if (ids.length === 0) return;
     if (!window.confirm(`确定要删除选中的 ${ids.length} 个学习记录吗？此操作不可恢复。`)) return;
-    let deleted = 0;
-    ids.forEach(id => {
-      const ok = deleteSession(id);
-      if (ok) deleted += 1;
-    });
+
+    try {
+      const results = await Promise.all(ids.map(id => deleteSession(id)));
+      const successCount = results.filter(Boolean).length;
     setSessions(prev => prev.filter(s => !ids.includes(s.id)));
-    if (deleted < ids.length) {
-      alert(`有 ${ids.length - deleted} 个记录删除失败，请重试`);
+      if (successCount < ids.length) {
+        alert(`有 ${ids.length - successCount} 个记录删除失败，请重试`);
+      }
+    } catch (e) {
+      console.error('批量删除失败:', e);
+      alert('批量删除失败，请重试');
     }
   };
 
