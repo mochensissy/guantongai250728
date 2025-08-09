@@ -113,15 +113,24 @@ const DashboardPage: React.FC = () => {
   const handleDeleteSession = async (sessionId: string) => {
     if (!window.confirm('确定要删除这个学习记录吗？此操作不可恢复。')) return;
 
+    // 乐观更新：先从界面移除
+    const snapshot = sessions;
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+
     try {
       const success = await deleteSession(sessionId);
-      if (success) {
-        setSessions(prev => prev.filter(s => s.id !== sessionId));
-      } else {
+      if (!success) {
+        // 回滚
+        setSessions(prev => {
+          const restore = snapshot.find(s => s.id === sessionId);
+          return restore ? [restore, ...prev] : prev;
+        });
         alert('删除失败，请重试');
       }
     } catch (e) {
       console.error('删除失败:', e);
+      // 回滚
+      setSessions(snapshot);
       alert('删除失败，请重试');
     }
   };
@@ -133,25 +142,37 @@ const DashboardPage: React.FC = () => {
     if (ids.length === 0) return;
     if (!window.confirm(`确定要删除选中的 ${ids.length} 个学习记录吗？此操作不可恢复。`)) return;
 
+    // 乐观更新：立即从界面移除
+    const snapshot = sessions;
+    setSessions(prev => prev.filter(s => !ids.includes(s.id)));
+
     try {
       console.log('[Dashboard] 开始批量删除', ids);
-      const results = await Promise.all(ids.map(async (id) => {
-        try {
-          const ok = await deleteSession(id);
-          console.log('[Dashboard] 删除结果', id, ok);
-          return ok;
-        } catch (e) {
-          console.error('[Dashboard] 删除异常', id, e);
-          return false;
+      const results = await Promise.allSettled(ids.map(id => deleteSession(id)));
+
+      const failedIds: string[] = [];
+      results.forEach((r, idx) => {
+        if (r.status === 'fulfilled') {
+          if (!r.value) failedIds.push(ids[idx]);
+        } else {
+          failedIds.push(ids[idx]);
         }
-      }));
-      const successCount = results.filter(Boolean).length;
-    setSessions(prev => prev.filter(s => !ids.includes(s.id)));
-      if (successCount < ids.length) {
-        alert(`有 ${ids.length - successCount} 个记录删除失败，请重试`);
+      });
+
+      if (failedIds.length > 0) {
+        // 局部回滚失败的记录
+        setSessions(prev => {
+          const toRestore = snapshot.filter(s => failedIds.includes(s.id));
+          // 合并并按时间排序
+          const merged = [...prev, ...toRestore];
+          return merged.sort((a, b) => b.updatedAt - a.updatedAt);
+        });
+        alert(`有 ${failedIds.length} 个记录删除失败，已恢复到列表`);
       }
     } catch (e) {
       console.error('批量删除失败:', e);
+      // 全量回滚
+      setSessions(snapshot);
       alert('批量删除失败，请重试');
     }
   };
