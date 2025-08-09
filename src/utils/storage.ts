@@ -13,6 +13,54 @@ import { LearningCard, ReviewRecord } from '../types';
 
 const STORAGE_KEY = 'ai-learning-platform';
 const CURRENT_VERSION = '1.0.0';
+// 软删除墓碑列表，防止被其他来源(导入/云端缓存)回灌
+const DELETED_IDS_KEY = 'ai-learning-platform-deleted-ids';
+
+const getDeletedIds = (): Set<string> => {
+  try {
+    if (typeof window === 'undefined') return new Set();
+    const raw = localStorage.getItem(DELETED_IDS_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+};
+
+/**
+ * 物理清除已软删除的会话，防止被其他来源回写
+ */
+export const purgeTombstonedSessions = (): void => {
+  try {
+    const data = safeGetStorageData();
+    const deleted = getDeletedIds();
+    if (deleted.size === 0) return;
+    const before = data.sessions.length;
+    data.sessions = data.sessions.filter(s => !deleted.has(s.id));
+    if (data.sessions.length !== before) {
+      safeSaveStorageData(data);
+    }
+  } catch (error) {
+    console.warn('清理墓碑会话失败:', error);
+  }
+};
+
+const addDeletedId = (id: string) => {
+  try {
+    if (typeof window === 'undefined') return;
+    const s = getDeletedIds();
+    s.add(id);
+    localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(Array.from(s)));
+  } catch {}
+};
+
+const removeDeletedIds = (ids: string[]) => {
+  try {
+    if (typeof window === 'undefined') return;
+    const s = getDeletedIds();
+    ids.forEach(id => s.delete(id));
+    localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(Array.from(s)));
+  } catch {}
+};
 
 /**
  * 获取默认的用户偏好设置
@@ -113,7 +161,10 @@ const safeSaveStorageData = (data: LocalStorageData): boolean => {
  */
 export const getAllSessions = (): LearningSession[] => {
   const data = safeGetStorageData();
-  return data.sessions.sort((a, b) => b.updatedAt - a.updatedAt);
+  const deleted = getDeletedIds();
+  return data.sessions
+    .filter(s => !deleted.has(s.id))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 };
 
 /**
@@ -169,7 +220,9 @@ export const deleteSession = (id: string): boolean => {
   try {
     const data = safeGetStorageData();
     data.sessions = data.sessions.filter(session => session.id !== id);
-    return safeSaveStorageData(data);
+    const ok = safeSaveStorageData(data);
+    if (ok) addDeletedId(id); // 记录墓碑，防回流
+    return ok;
   } catch (error) {
     console.error('删除会话失败:', error);
     return false;

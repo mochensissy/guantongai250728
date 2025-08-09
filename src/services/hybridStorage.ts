@@ -93,13 +93,17 @@ export class HybridStorageService {
         const cloudResult = await cloudStorage.getUserSessions()
         
         if (cloudResult.success && cloudResult.sessions) {
+          // 读取墓碑并在内存中过滤，避免云端数据回流
+          const tombstonesRaw = typeof window !== 'undefined' ? localStorage.getItem('ai-learning-platform-deleted-ids') : null
+          const tombstones: Set<string> = new Set(tombstonesRaw ? JSON.parse(tombstonesRaw) : [])
+          const filtered = cloudResult.sessions.filter(s => !tombstones.has(s.id))
           // 更新本地缓存
-          await this.updateLocalCache('sessions', cloudResult.sessions)
-          return cloudResult.sessions
+          await this.updateLocalCache('sessions', filtered)
+          return filtered
         }
       }
       
-      // 降级到本地数据
+      // 降级到本地数据（本地 getAllSessions 已会过滤墓碑）
       return localStorageService.getAllSessions()
     } catch (error) {
       console.error('获取会话失败，使用本地数据:', error)
@@ -540,8 +544,13 @@ export class HybridStorageService {
       switch (type) {
         case 'sessions':
           // 更新本地会话缓存
+          // 读取软删除墓碑，避免回灌被删除的记录
+          const tombstonesRaw = typeof window !== 'undefined' ? localStorage.getItem('ai-learning-platform-deleted-ids') : null
+          const tombstones: Set<string> = new Set(tombstonesRaw ? JSON.parse(tombstonesRaw) : [])
           for (const session of data) {
-            localStorageService.saveSession(session)
+            if (!tombstones.has(session.id)) {
+              localStorageService.saveSession(session)
+            }
           }
           break
         default:

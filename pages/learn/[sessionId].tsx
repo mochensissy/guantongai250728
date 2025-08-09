@@ -64,7 +64,20 @@ const LearnPageContent: React.FC = () => {
         console.log('📦 localStorage中的所有会话:', allSessions.sessions?.map(s => ({id: s.id, title: s.title})));
         
         const loadedSession = getSessionById(sessionId);
-        const loadedConfig = getAPIConfig();
+        // 优先通过适配器获取API配置；若未取到，再从原始localStorage兜底读取，避免误判
+        let loadedConfig = getAPIConfig();
+        if (!loadedConfig && typeof window !== 'undefined') {
+          try {
+            const raw = window.localStorage.getItem('ai-learning-platform');
+            const parsed = raw ? JSON.parse(raw) : null;
+            if (parsed && parsed.apiConfig && parsed.apiConfig.apiKey) {
+              loadedConfig = parsed.apiConfig;
+              console.log('⚙️ 通过兜底读取到API配置');
+            }
+          } catch (e) {
+            console.warn('兜底读取API配置失败:', e);
+          }
+        }
         
         console.log('🎯 查找的会话ID:', sessionId);
         console.log('📋 找到的会话:', loadedSession ? `${loadedSession.title} (${loadedSession.id})` : 'null');
@@ -78,7 +91,7 @@ const LearnPageContent: React.FC = () => {
         }
 
         if (!loadedConfig) {
-          console.error('❌ API配置丢失');
+          console.error('❌ API配置丢失（适配器与兜底都未读取到）');
           alert('API配置丢失，请重新配置');
           router.push('/dashboard');
           return;

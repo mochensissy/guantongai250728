@@ -226,7 +226,9 @@ export default function DataLifecycleManager() {
           try {
             const current = JSON.parse(localStorageService.exportData()) as LocalStorageData
             const merged = mergeBackupData(current, parsed as LocalStorageData)
-            ok = localStorageService.importData(JSON.stringify(merged))
+          ok = localStorageService.importData(JSON.stringify(merged))
+          // 合并导入后，清空墓碑，避免历史删除影响新导入的数据
+          try { localStorage.removeItem('ai-learning-platform-deleted-ids') } catch {}
           } catch (err) {
             console.error('合并导入失败:', err)
             alert('合并导入失败，请重试或改用覆盖导入')
@@ -241,6 +243,8 @@ export default function DataLifecycleManager() {
             window.dispatchEvent(new CustomEvent('storageImported'))
           } catch {}
           await loadStorageStats()
+          // 触发UI刷新
+          try { window.dispatchEvent(new CustomEvent('storageImported')) } catch {}
         } else {
           alert('导入失败，请确认文件内容与格式')
         }

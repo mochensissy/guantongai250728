@@ -25,6 +25,7 @@ import {
   getAPIConfig, 
   saveAPIConfig 
 } from '../src/utils/storageAdapter';
+import { purgeTombstonedSessions, deleteSession as localDeleteSession } from '../src/utils/storage';
 import { useAuth } from '../src/contexts/AuthContext';
 import { useRouter } from 'next/router';
 import { generateOutline, fixExistingOutline } from '../src/utils/aiService';
@@ -84,6 +85,8 @@ const DashboardPage: React.FC = () => {
 
     const initializeData = () => {
       try {
+        // 确保物理清理已删除的会话，防止跨页回灌
+        purgeTombstonedSessions();
         // 加载用户数据
         const loadedSessions = getAllSessions();
         const loadedConfig = getAPIConfig();
@@ -102,6 +105,7 @@ const DashboardPage: React.FC = () => {
     // 监听“导入完成”事件，自动刷新学习历史（无需手动刷新页面）
     const onImported = () => {
       try {
+        purgeTombstonedSessions();
         const updated = getAllSessions();
         setSessions(updated);
       } catch (e) {
@@ -131,9 +135,11 @@ const DashboardPage: React.FC = () => {
   const handleDeleteSession = async (sessionId: string) => {
     if (!window.confirm('确定要删除这个学习记录吗？此操作不可恢复。')) return;
 
+    // 立即本地持久化删除（写入墓碑），保证离开页面后也不会回流
+    try { localDeleteSession(sessionId) } catch {}
     // 乐观更新：先从界面移除
     const snapshot = sessions;
-    setSessions(prev => prev.filter(s => s.id !== sessionId));
+        setSessions(prev => prev.filter(s => s.id !== sessionId));
 
     try {
       const success = await deleteSession(sessionId);
@@ -160,6 +166,8 @@ const DashboardPage: React.FC = () => {
     if (ids.length === 0) return;
     if (!window.confirm(`确定要删除选中的 ${ids.length} 个学习记录吗？此操作不可恢复。`)) return;
 
+    // 立即本地持久化删除每一条（写入墓碑）
+    try { ids.forEach(id => { try { localDeleteSession(id) } catch {} }) } catch {}
     // 乐观更新：立即从界面移除
     const snapshot = sessions;
     setSessions(prev => prev.filter(s => !ids.includes(s.id)));
