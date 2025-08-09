@@ -134,7 +134,17 @@ const DashboardPage: React.FC = () => {
     if (!window.confirm(`确定要删除选中的 ${ids.length} 个学习记录吗？此操作不可恢复。`)) return;
 
     try {
-      const results = await Promise.all(ids.map(id => deleteSession(id)));
+      console.log('[Dashboard] 开始批量删除', ids);
+      const results = await Promise.all(ids.map(async (id) => {
+        try {
+          const ok = await deleteSession(id);
+          console.log('[Dashboard] 删除结果', id, ok);
+          return ok;
+        } catch (e) {
+          console.error('[Dashboard] 删除异常', id, e);
+          return false;
+        }
+      }));
       const successCount = results.filter(Boolean).length;
     setSessions(prev => prev.filter(s => !ids.includes(s.id)));
       if (successCount < ids.length) {

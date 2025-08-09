@@ -248,7 +248,13 @@ const SessionHistoryList: React.FC<SessionHistoryListProps> = ({
                   variant="outline"
                   size="sm"
                   disabled={selectedIds.length === 0 || !onBatchDelete}
-                  onClick={() => onBatchDelete && onBatchDelete(selectedIds)}
+                  onClick={() => {
+                    // 调试：输出当前选择数量和ID，便于定位“无反应”的问题
+                    try {
+                      console.log('[SessionHistoryList] 执行批量删除', { count: selectedIds.length, ids: selectedIds })
+                    } catch {}
+                    onBatchDelete && onBatchDelete([...selectedIds])
+                  }}
                 >
                   批量删除
                 </Button>
